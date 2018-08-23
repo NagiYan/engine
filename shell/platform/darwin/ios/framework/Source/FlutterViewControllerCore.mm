@@ -334,10 +334,10 @@
         [[UIStoryboard storyboardWithName:launchStoryboardName bundle:nil]
          instantiateInitialViewController];
         _launchView.reset([launchViewController.view retain]);
-        _launchView.get().frame = self.viewController.view.bounds;
+        _launchView.get().frame = self.flutterView.bounds;
         _launchView.get().autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [self.viewController.view addSubview:_launchView.get()];
+        [self.flutterView addSubview:_launchView.get()];
     }
 }
 
@@ -544,7 +544,7 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
     }
 
     FML_DCHECK(device_id != 0);
-    CGPoint windowCoordinates = [touch locationInView:self.viewController.view];
+    CGPoint windowCoordinates = [touch locationInView:self.flutterView];
 
     blink::PointerData pointer_data;
     pointer_data.Clear();
@@ -653,16 +653,16 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
 }
 
 - (CGFloat)statusBarPadding {
-  UIScreen* screen = self.viewController.view.window.screen;
+  UIScreen* screen = self.flutterView.window.screen;
   CGRect statusFrame = [UIApplication sharedApplication].statusBarFrame;
   CGRect viewFrame =
-      [self.viewController.view convertRect:self.viewController.view.bounds toCoordinateSpace:screen.coordinateSpace];
+      [self.flutterView convertRect:self.flutterView.bounds toCoordinateSpace:screen.coordinateSpace];
   CGRect intersection = CGRectIntersection(statusFrame, viewFrame);
   return CGRectIsNull(intersection) ? 0.0 : intersection.size.height;
 }
 
 - (void)viewDidLayoutSubviews {
-  CGSize viewSize = self.viewController.view.bounds.size;
+  CGSize viewSize = self.flutterView.bounds.size;
   CGFloat scale = [UIScreen mainScreen].scale;
 
   // First time since creation that the dimensions of its view is known.
@@ -691,10 +691,10 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
 - (void)updateViewportPadding {
   CGFloat scale = [UIScreen mainScreen].scale;
   if (@available(iOS 11, *)) {
-    _viewportMetrics.physical_padding_top = self.viewController.view.safeAreaInsets.top * scale;
-    _viewportMetrics.physical_padding_left = self.viewController.view.safeAreaInsets.left * scale;
-    _viewportMetrics.physical_padding_right = self.viewController.view.safeAreaInsets.right * scale;
-    _viewportMetrics.physical_padding_bottom = self.viewController.view.safeAreaInsets.bottom * scale;
+    _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+    _viewportMetrics.physical_padding_left = self.flutterView.safeAreaInsets.left * scale;
+    _viewportMetrics.physical_padding_right = self.flutterView.safeAreaInsets.right * scale;
+    _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
   } else {
     _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
   }
@@ -923,7 +923,7 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
 - (void)handleStatusBarTouches:(UIEvent*)event {
   CGFloat standardStatusBarHeight = kStandardStatusBarHeight;
   if (@available(iOS 11, *)) {
-    standardStatusBarHeight = self.viewController.view.safeAreaInsets.top;
+    standardStatusBarHeight = self.flutterView.safeAreaInsets.top;
   }
 
   // If the status bar is double-height, don't handle status bar taps. iOS

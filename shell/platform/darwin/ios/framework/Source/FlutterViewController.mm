@@ -12,6 +12,7 @@
 @interface FlutterViewController ()
 @property (nonatomic, retain) UIImageView *fakeSnapImgView;
 @property(nonatomic,retain) UIImage *lastSnapshot;
+@property(nonatomic,retain) NSString *routeUrl;
 @end
 
 @implementation FlutterViewController {
@@ -53,6 +54,7 @@
     NSLog(@"ASCFlutter FlutterViewController dealloc %@", self);
     [_fakeSnapImgView release];
     [_lastSnapshot release];
+    [_routeUrl release];
     [super dealloc];
 }
 
@@ -67,13 +69,14 @@
 }
 
 - (void)setInitialRoute:(NSString*)route {
-    [[self flutterViewControllerCore] setInitialRoute:route];
+    self.routeUrl = route;
+    [[self flutterViewControllerCore] setInitialRoute:self.routeUrl];
 }
 
 #pragma mark - Loading the view
 
 - (void)loadView {
-    self.fakeSnapImgView = [[UIImageView alloc] initWithFrame:self.view.bounds];
+    self.fakeSnapImgView = [[UIImageView alloc] initWithFrame:[UIScreen mainScreen].bounds];
     self.fakeSnapImgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.fakeSnapImgView setBackgroundColor:[UIColor clearColor]];
     self.view = self.fakeSnapImgView;
@@ -196,15 +199,19 @@
 #pragma mark - tools
 
 - (void)showFlutterView {
-    NSLog(@"ASCFlutter FlutterViewController showFlutterView %@", self);
     // imageView -> flutterView
     if (![[[self flutterViewControllerCore] flutterView] nextResponder]) {
+        NSLog(@"ASCFlutter FlutterViewController showFlutterView %@", self);
         self.view = [[self flutterViewControllerCore] flutterView];
         
         [[self flutterViewControllerCore] installLaunchViewIfNecessary];
         [self.navigationController setNavigationBarHidden:YES animated:NO];
         // flutterView
         [self.view setUserInteractionEnabled:YES];
+        [[self flutterViewControllerCore] setInitialRoute:self.routeUrl];
+    }
+    else {
+        NSLog(@"ASCFlutter FlutterViewController already showFlutterView %@", self);
     }
 }
 
