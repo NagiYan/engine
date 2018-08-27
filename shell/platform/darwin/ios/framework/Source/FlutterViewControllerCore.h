@@ -20,6 +20,13 @@
 
 + (instancetype)sharedInstance:(FlutterDartProject*)projectOrNil withFlutterViewController:(FlutterViewController*)viewController;
 
+/**
+ release the core
+ */
++ (void)freeMemory;
+
+- (instancetype)initWithProject:(FlutterDartProject*)projectOrNil andViewController:(FlutterViewController*)viewController;
+
 - (void)handleStatusBarTouches:(UIEvent*)event;
 
 /**

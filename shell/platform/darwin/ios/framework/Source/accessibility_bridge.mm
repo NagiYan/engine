@@ -85,6 +85,7 @@ blink::SemanticsAction GetSemanticsActionForScrollDirection(
 - (instancetype)initWithSemanticsObject:(SemanticsObject*)semanticsObject
                                  bridge:(fml::WeakPtr<shell::AccessibilityBridge>)bridge
     NS_DESIGNATED_INITIALIZER;
+- (void)reset;
 @end
 
 @implementation SemanticsObject {
@@ -98,6 +99,10 @@ blink::SemanticsAction GetSemanticsActionForScrollDirection(
   [self release];
   [super doesNotRecognizeSelector:_cmd];
   return nil;
+}
+
+- (void)clean {
+    [_container reset];
 }
 
 #pragma mark - Designated initializers
@@ -423,6 +428,11 @@ blink::SemanticsAction GetSemanticsActionForScrollDirection(
   return self;
 }
 
+- (void)reset {
+    [_semanticsObject release];
+    _semanticsObject = nil;
+}
+
 - (void)dealloc {
   [_semanticsObject release];
   [super dealloc];
@@ -494,6 +504,7 @@ AccessibilityBridge::AccessibilityBridge(UIView* view, PlatformViewIOS* platform
       platform_view_(platform_view),
       objects_([[NSMutableDictionary alloc] init]),
       weak_factory_(this),
+    all_objects_([NSMutableArray new]),
       previous_route_id_(0),
       previous_routes_({}) {
   accessibility_channel_.reset([[FlutterBasicMessageChannel alloc]
@@ -507,6 +518,15 @@ AccessibilityBridge::AccessibilityBridge(UIView* view, PlatformViewIOS* platform
 
 AccessibilityBridge::~AccessibilityBridge() {
   view_.accessibilityElements = nil;
+    NSMutableDictionary* xx = objects_.get();
+    [xx removeAllObjects];
+    [all_objects_ enumerateObjectsUsingBlock:^(SemanticsObject * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        obj.parent = nil;
+        [obj.children removeAllObjects];
+        [obj clean];
+    }];
+    [all_objects_ removeAllObjects];
+    [all_objects_ release];
   [accessibility_channel_.get() setMessageHandler:nil];
 }
 
@@ -636,7 +656,7 @@ SemanticsObject* AccessibilityBridge::GetOrCreateObject(int32_t uid,
     } else {
       object = [[[FlutterSemanticsObject alloc] initWithBridge:GetWeakPtr() uid:uid] autorelease];
     }
-
+      [all_objects_ addObject:object];
     objects_.get()[@(uid)] = object;
   } else {
     // Existing node case
@@ -660,6 +680,7 @@ SemanticsObject* AccessibilityBridge::GetOrCreateObject(int32_t uid,
           object =
               [[[FlutterSemanticsObject alloc] initWithBridge:GetWeakPtr() uid:uid] autorelease];
         }
+          [all_objects_ addObject:object];
         [object.parent.children replaceObjectAtIndex:positionInChildlist withObject:object];
         objects_.get()[@(node.id)] = object;
       }

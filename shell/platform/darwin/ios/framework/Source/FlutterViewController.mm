@@ -11,7 +11,7 @@
 
 @interface FlutterViewController ()
 @property (nonatomic, retain) UIImageView *fakeSnapImgView;
-@property(nonatomic,retain) UIImage *lastSnapshot;
+@property (nonatomic, retain) UIImage *snapImage;
 @property(nonatomic,retain) NSString *routeUrl;
 @end
 
@@ -53,8 +53,8 @@
 - (void)dealloc {
     NSLog(@"ASCFlutter FlutterViewController dealloc %@", self);
     [_fakeSnapImgView release];
-    [_lastSnapshot release];
     [_routeUrl release];
+    [_snapImage release];
     [super dealloc];
 }
 
@@ -76,11 +76,17 @@
 #pragma mark - Loading the view
 
 - (void)loadView {
-    self.fakeSnapImgView = [[UIImageView alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    self.fakeSnapImgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.fakeSnapImgView setBackgroundColor:[UIColor clearColor]];
     self.view = self.fakeSnapImgView;
     [[self flutterViewControllerCore] installLaunchViewIfNecessary];
+}
+
+- (UIImageView*)fakeSnapImgView {
+    if (!_fakeSnapImgView) {
+        _fakeSnapImgView = [[[UIImageView alloc] initWithFrame:[UIScreen mainScreen].bounds] autorelease];
+        _fakeSnapImgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [_fakeSnapImgView setBackgroundColor:[UIColor clearColor]];
+    }
+    return _fakeSnapImgView;
 }
 
 #pragma mark - UIViewController lifecycle notifications
@@ -98,14 +104,25 @@
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
+    [self takeSnapShot];
+    [self showSnapView];
     [super viewWillDisappear:animated];
     [[self flutterViewControllerCore] viewWillDisappear:animated];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
-    [self showSnapView];
     [[self flutterViewControllerCore] viewDidDisappear:animated];
+}
+
+- (void)didReceiveMemoryWarning {
+    // load and not visible
+    if (self.isViewLoaded && !self.view.window) {
+        // set the blank view
+        self.view = nil;
+        // free the core
+        [FlutterViewControllerCore freeMemory];
+    }
 }
 
 #pragma mark - Touch event handling
@@ -219,18 +236,18 @@
     NSLog(@"ASCFlutter FlutterViewController showSnapView %@", self);
     // flutterView
     [self.view setUserInteractionEnabled:FALSE];
-    if(self.lastSnapshot == nil){
-        UIGraphicsBeginImageContextWithOptions([UIScreen mainScreen].bounds.size, YES, 0);
-        [self.view drawViewHierarchyInRect:self.view.bounds afterScreenUpdates:NO];
-        self.lastSnapshot = UIGraphicsGetImageFromCurrentImageContext();
-        UIGraphicsEndImageContext();
-        [self.fakeSnapImgView setImage:self.lastSnapshot];
-        // flutterView -> imageView
-        self.view = self.fakeSnapImgView;
-        self.lastSnapshot = nil;
-    }
+    [self.fakeSnapImgView setImage:self.snapImage];
+    // flutterView -> imageView
+    self.view = self.fakeSnapImgView;
+    self.snapImage = NULL;
 }
 
+- (void)takeSnapShot {
+    UIGraphicsBeginImageContextWithOptions([UIScreen mainScreen].bounds.size, YES, 0);
+    [self.view drawViewHierarchyInRect:self.view.bounds afterScreenUpdates:NO];
+    self.snapImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+}
 
 - (FlutterViewController*)flutterViewController:(UIView*)view {
     // Find the first view controller in the responder chain and see if it is a FlutterViewController.

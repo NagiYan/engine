@@ -79,6 +79,7 @@ class AccessibilityBridge;
 - (instancetype)initWithBridge:(fml::WeakPtr<shell::AccessibilityBridge>)bridge
                            uid:(int32_t)uid NS_DESIGNATED_INITIALIZER;
 
+- (void)clean;
 @end
 
 /**
@@ -141,6 +142,7 @@ class AccessibilityBridge final {
   fml::scoped_nsobject<NSMutableDictionary<NSNumber*, SemanticsObject*>> objects_;
   fml::scoped_nsprotocol<FlutterBasicMessageChannel*> accessibility_channel_;
   fml::WeakPtrFactory<AccessibilityBridge> weak_factory_;
+  NSMutableArray<SemanticsObject*> *all_objects_;
   int32_t previous_route_id_;
   std::unordered_map<int32_t, blink::CustomAccessibilityAction> actions_;
   std::vector<int32_t> previous_routes_;

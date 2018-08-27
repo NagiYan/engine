@@ -63,20 +63,21 @@
 
 #pragma mark - Manage and override all designated initializers
 
+static FlutterViewControllerCore *_flutterViewControllerCore;
+static dispatch_once_t onceToken;
+
 + (instancetype)sharedInstance:(FlutterDartProject*)projectOrNil withFlutterViewController:(FlutterViewController*)viewController {
-    static dispatch_once_t onceToken;
-    static FlutterViewControllerCore *flutterViewControllerCore;
-    if(flutterViewControllerCore) {
+    if(_flutterViewControllerCore) {
         if (viewController)
-            flutterViewControllerCore.viewController = viewController;
-        return flutterViewControllerCore;
+            _flutterViewControllerCore.viewController = viewController;
+        return _flutterViewControllerCore;
     }
     
     dispatch_once(&onceToken, ^{
-        flutterViewControllerCore = [[FlutterViewControllerCore alloc] initWithProject:projectOrNil andViewController:viewController];
+        _flutterViewControllerCore = [[FlutterViewControllerCore alloc] initWithProject:projectOrNil andViewController:viewController];
     });
 
-    return flutterViewControllerCore;
+    return _flutterViewControllerCore;
 }
 
 - (instancetype)initWithProject:(FlutterDartProject*)projectOrNil andViewController:(FlutterViewController*)viewController {
@@ -94,6 +95,28 @@
 
 - (FlutterView*)flutterView {
     return _flutterView.get();
+}
+
++ (void)freeMemory {
+    if (_flutterViewControllerCore) {
+        [[FlutterViewControllerCore sharedInstance:nil withFlutterViewController:nil] clean];
+        onceToken = 0;
+        [_flutterViewControllerCore release];
+        _flutterViewControllerCore = nil;
+    }
+}
+
+- (void)clean {
+    _localizationChannel.reset();
+    _platformChannel.reset();
+    _textInputChannel.reset();
+    _lifecycleChannel.reset();
+    _systemChannel.reset();
+    _settingsChannel.reset();
+    _navigationChannel.reset();
+    
+    [self iosPlatformView]->GetTextInputPlugin().get().textInputDelegate = nil;
+    _shell = nil;
 }
 
 #pragma mark - Common view controller initialization tasks
@@ -400,22 +423,24 @@
 - (void)viewWillAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewWillAppear");
     
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        // Launch the Dart application with the inferred run configuration.
-        _shell->GetTaskRunners().GetUITaskRunner()->PostTask(
-                                                             fml::MakeCopyable([engine = _shell->GetEngine(),                   //
-                                                                                config = [_dartProject.get() runConfiguration]  //
-                                                                                ]() mutable {
-            if (engine) {
-                auto result = engine->Run(std::move(config));
-                if (!result) {
-                    FML_LOG(ERROR) << "Could not launch engine with configuration.";
-                }
-            }
-        }));
-    });
+//    static dispatch_once_t onceToken;
+//    dispatch_once(&onceToken, ^{
+//
+//    });
 
+    // Launch the Dart application with the inferred run configuration.
+    _shell->GetTaskRunners().GetUITaskRunner()->PostTask(
+                                                         fml::MakeCopyable([engine = _shell->GetEngine(),                   //
+                                                                            config = [_dartProject.get() runConfiguration]  //
+                                                                            ]() mutable {
+        if (engine) {
+            auto result = engine->Run(std::move(config));
+            if (!result) {
+                FML_LOG(ERROR) << "Could not launch engine with configuration.";
+            }
+        }
+    }));
+    
   // Only recreate surface on subsequent appearances when viewport metrics are known.
   // First time surface creation is done on viewDidLayoutSubviews.
 
@@ -1002,8 +1027,10 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
 - (void)setMessageHandlerOnChannel:(NSString*)channel
               binaryMessageHandler:(FlutterBinaryMessageHandler)handler {
   NSAssert(channel, @"The channel must not be null");
-  [self iosPlatformView] -> GetPlatformMessageRouter().SetMessageHandler(channel.UTF8String,
-                                                                         handler);
+    if (_shell != NULL) {
+        [self iosPlatformView] -> GetPlatformMessageRouter().SetMessageHandler(channel.UTF8String,
+                                                                               handler);
+    }
 }
 
 #pragma mark - FlutterTextureRegistry
@@ -1039,8 +1066,7 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
 - (NSObject<FlutterPluginRegistrar>*)registrarForPlugin:(NSString*)pluginKey {
   NSAssert(self.pluginPublications[pluginKey] == nil, @"Duplicate plugin key: %@", pluginKey);
   self.pluginPublications[pluginKey] = [NSNull null];
-  return
-      [[FlutterViewControllerRegistrar alloc] initWithPlugin:pluginKey flutterViewControllerCore:self];
+  return [[[FlutterViewControllerRegistrar alloc] initWithPlugin:pluginKey flutterViewControllerCore:self] autorelease];
 }
 
 - (BOOL)hasPlugin:(NSString*)pluginKey {
