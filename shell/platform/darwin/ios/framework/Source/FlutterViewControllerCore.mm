@@ -410,7 +410,7 @@ static dispatch_once_t onceToken;
 - (void)surfaceUpdated:(BOOL)appeared {
   // NotifyCreated/NotifyDestroyed are synchronous and require hops between the UI and GPU thread.
   if (appeared) {
-    [self installLaunchViewCallback];
+//    [self installLaunchViewCallback];
     _shell->GetPlatformView()->NotifyCreated();
 
   } else {
@@ -648,22 +648,6 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
           engine->DispatchPointerDataPacket(*packet);
         }
       }));
-}
-
-- (void)touchesBegan:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self dispatchTouches:touches phase:UITouchPhaseBegan];
-}
-
-- (void)touchesMoved:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self dispatchTouches:touches phase:UITouchPhaseMoved];
-}
-
-- (void)touchesEnded:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self dispatchTouches:touches phase:UITouchPhaseEnded];
-}
-
-- (void)touchesCancelled:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self dispatchTouches:touches phase:UITouchPhaseCancelled];
 }
 
 #pragma mark - Handle view resizing

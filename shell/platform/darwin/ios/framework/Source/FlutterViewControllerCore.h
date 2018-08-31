@@ -65,8 +65,6 @@
 
 - (FlutterView*)flutterView;
 
-- (void)installLaunchViewIfNecessary;
-
 - (void)viewWillAppear:(BOOL)animated;
 - (void)viewDidAppear:(BOOL)animated;
 - (void)viewWillDisappear:(BOOL)animated;

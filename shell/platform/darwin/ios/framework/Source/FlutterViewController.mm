@@ -77,12 +77,12 @@
 
 - (void)loadView {
     self.view = self.fakeSnapImgView;
-    [[self flutterViewControllerCore] installLaunchViewIfNecessary];
+//    [[self flutterViewControllerCore] installLaunchViewIfNecessary];
 }
 
 - (UIImageView*)fakeSnapImgView {
     if (!_fakeSnapImgView) {
-        _fakeSnapImgView = [[[UIImageView alloc] initWithFrame:[UIScreen mainScreen].bounds] autorelease];
+        _fakeSnapImgView = [[UIImageView alloc] initWithFrame:[UIScreen mainScreen].bounds];
         _fakeSnapImgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [_fakeSnapImgView setBackgroundColor:[UIColor clearColor]];
     }
@@ -124,7 +124,7 @@
         [FlutterViewControllerCore freeMemory];
     }
 }
-
+  
 #pragma mark - Touch event handling
 - (void)touchesBegan:(NSSet*)touches withEvent:(UIEvent*)event {
     [[self flutterViewControllerCore] dispatchTouches:touches phase:UITouchPhaseBegan];
@@ -218,22 +218,17 @@
 - (void)showFlutterView {
     // imageView -> flutterView
     if (![[[self flutterViewControllerCore] flutterView] nextResponder]) {
-        NSLog(@"ASCFlutter FlutterViewController showFlutterView %@", self);
         self.view = [[self flutterViewControllerCore] flutterView];
         
-        [[self flutterViewControllerCore] installLaunchViewIfNecessary];
+//        [[self flutterViewControllerCore] installLaunchViewIfNecessary];
         [self.navigationController setNavigationBarHidden:YES animated:NO];
         // flutterView
         [self.view setUserInteractionEnabled:YES];
         [[self flutterViewControllerCore] setInitialRoute:self.routeUrl];
     }
-    else {
-        NSLog(@"ASCFlutter FlutterViewController already showFlutterView %@", self);
-    }
 }
 
 - (void)showSnapView {
-    NSLog(@"ASCFlutter FlutterViewController showSnapView %@", self);
     // flutterView
     [self.view setUserInteractionEnabled:FALSE];
     [self.fakeSnapImgView setImage:self.snapImage];
