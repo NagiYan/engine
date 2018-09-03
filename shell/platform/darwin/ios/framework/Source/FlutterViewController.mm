@@ -10,9 +10,8 @@
 #pragma mark -
 
 @interface FlutterViewController ()
-@property (nonatomic, retain) UIImageView *fakeSnapImgView;
-@property (nonatomic, retain) UIImage *snapImage;
-@property(nonatomic,retain) NSString *routeUrl;
+@property (nonatomic, retain) NSString *routeUrl;
+@property (nonatomic, retain) UIView *snapView;
 @end
 
 @implementation FlutterViewController {
@@ -30,7 +29,6 @@
                          bundle:(NSBundle*)nibBundleOrNil {
   self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
   if (self) {
-      // the projectOrNil param only set in the first FlutterViewController Instance
       [FlutterViewControllerCore sharedInstance:projectOrNil withFlutterViewController:self];
       [self performCommonViewControllerInitialization];
   }
@@ -51,10 +49,10 @@
 }
 
 - (void)dealloc {
-    NSLog(@"ASCFlutter FlutterViewController dealloc %@", self);
-    [_fakeSnapImgView release];
+    //NSLog(@"ASCFlutter FlutterViewController dealloc %@", self);
     [_routeUrl release];
-    [_snapImage release];
+    [_snapView release];
+    
     [super dealloc];
 }
 
@@ -76,17 +74,16 @@
 #pragma mark - Loading the view
 
 - (void)loadView {
-    self.view = self.fakeSnapImgView;
-//    [[self flutterViewControllerCore] installLaunchViewIfNecessary];
+    self.view = self.snapView;
 }
 
-- (UIImageView*)fakeSnapImgView {
-    if (!_fakeSnapImgView) {
-        _fakeSnapImgView = [[UIImageView alloc] initWithFrame:[UIScreen mainScreen].bounds];
-        _fakeSnapImgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [_fakeSnapImgView setBackgroundColor:[UIColor clearColor]];
+- (UIView*)snapView {
+    if (!_snapView) {
+        _snapView = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+        _snapView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [_snapView setBackgroundColor:[UIColor clearColor]];
     }
-    return _fakeSnapImgView;
+    return _snapView;
 }
 
 #pragma mark - UIViewController lifecycle notifications
@@ -216,32 +213,23 @@
 #pragma mark - tools
 
 - (void)showFlutterView {
-    // imageView -> flutterView
     if (![[[self flutterViewControllerCore] flutterView] nextResponder]) {
         self.view = [[self flutterViewControllerCore] flutterView];
-        
-//        [[self flutterViewControllerCore] installLaunchViewIfNecessary];
+        [[self flutterViewControllerCore] updateHolder:self];
+        //NSLog(@"ASCFlutter FlutterViewControllerCore updateHolder %@", self);
         [self.navigationController setNavigationBarHidden:YES animated:NO];
-        // flutterView
         [self.view setUserInteractionEnabled:YES];
         [[self flutterViewControllerCore] setInitialRoute:self.routeUrl];
     }
 }
 
 - (void)showSnapView {
-    // flutterView
     [self.view setUserInteractionEnabled:FALSE];
-    [self.fakeSnapImgView setImage:self.snapImage];
-    // flutterView -> imageView
-    self.view = self.fakeSnapImgView;
-    self.snapImage = NULL;
+    self.view = self.snapView;
 }
 
 - (void)takeSnapShot {
-    UIGraphicsBeginImageContextWithOptions([UIScreen mainScreen].bounds.size, YES, 0);
-    [self.view drawViewHierarchyInRect:self.view.bounds afterScreenUpdates:NO];
-    self.snapImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
+    self.snapView = [self.view snapshotViewAfterScreenUpdates:NO];
 }
 
 - (FlutterViewController*)flutterViewController:(UIView*)view {
@@ -252,8 +240,6 @@
             if ([responder isKindOfClass:[FlutterViewController class]]) {
                 return reinterpret_cast<FlutterViewController*>(responder);
             } else {
-                // Should only happen if a non-FlutterViewController tries to somehow (via dynamic class
-                // resolution or reparenting) set a FlutterView as its view.
                 return nil;
             }
         }

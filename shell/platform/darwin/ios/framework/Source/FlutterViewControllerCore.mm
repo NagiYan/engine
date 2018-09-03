@@ -25,7 +25,7 @@
 
 @interface FlutterViewControllerCore () <FlutterTextInputDelegate>
 @property(nonatomic, readonly) NSMutableDictionary* pluginPublications;
-@property(nonatomic, unsafe_unretained) FlutterViewController *viewController;
+@property(nonatomic, retain) FlutterViewController *viewController;
 @end
 
 @interface FlutterViewControllerRegistrar : NSObject <FlutterPluginRegistrar>
@@ -97,6 +97,10 @@ static dispatch_once_t onceToken;
     return _flutterView.get();
 }
 
+- (void)updateHolder:(FlutterViewController*)viewController {
+    self.viewController = viewController;
+}
+
 + (void)freeMemory {
     if (_flutterViewControllerCore) {
         [[FlutterViewControllerCore sharedInstance:nil withFlutterViewController:nil] clean];
@@ -114,7 +118,7 @@ static dispatch_once_t onceToken;
     _systemChannel.reset();
     _settingsChannel.reset();
     _navigationChannel.reset();
-    
+    self.viewController = nil;
     [self iosPlatformView]->GetTextInputPlugin().get().textInputDelegate = nil;
     _shell = nil;
 }

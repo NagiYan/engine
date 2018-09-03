@@ -61,6 +61,8 @@
 
 - (void)performCommonViewControllerInitialization;
 
+- (void)updateHolder:(FlutterViewController*)viewController;
+
 - (shell::Shell&)shell;
 
 - (FlutterView*)flutterView;
