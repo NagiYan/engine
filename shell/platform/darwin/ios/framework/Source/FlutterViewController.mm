@@ -10,13 +10,10 @@
 #pragma mark -
 
 @interface FlutterViewController ()
-@property (nonatomic, retain) NSString *routeUrl;
 @property (nonatomic, retain) UIView *snapView;
 @end
 
-@implementation FlutterViewController {
-    
-}
+@implementation FlutterViewController
 
 #pragma mark - Manage and override all designated initializers
 
@@ -50,7 +47,6 @@
 
 - (void)dealloc {
     //NSLog(@"ASCFlutter FlutterViewController dealloc %@", self);
-    [_routeUrl release];
     [_snapView release];
     
     [super dealloc];
@@ -67,8 +63,7 @@
 }
 
 - (void)setInitialRoute:(NSString*)route {
-    self.routeUrl = route;
-    [[self flutterViewControllerCore] setInitialRoute:self.routeUrl];
+    [[self flutterViewControllerCore] setInitialRoute:route];
 }
 
 #pragma mark - Loading the view
@@ -81,7 +76,7 @@
     if (!_snapView) {
         _snapView = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
         _snapView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [_snapView setBackgroundColor:[UIColor clearColor]];
+        [_snapView setBackgroundColor:[UIColor whiteColor]];
     }
     return _snapView;
 }
@@ -101,7 +96,6 @@
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-    [self takeSnapShot];
     [self showSnapView];
     [super viewWillDisappear:animated];
     [[self flutterViewControllerCore] viewWillDisappear:animated];
@@ -120,6 +114,7 @@
         // free the core
         [FlutterViewControllerCore freeMemory];
     }
+    [super didReceiveMemoryWarning];
 }
   
 #pragma mark - Touch event handling
@@ -142,6 +137,7 @@
 #pragma mark - Handle view resizing
 - (void)viewDidLayoutSubviews {
     [[self flutterViewControllerCore] viewDidLayoutSubviews];
+    [super viewDidLayoutSubviews];
 }
 
 - (void)viewSafeAreaInsetsDidChange {
@@ -219,32 +215,13 @@
         //NSLog(@"ASCFlutter FlutterViewControllerCore updateHolder %@", self);
         [self.navigationController setNavigationBarHidden:YES animated:NO];
         [self.view setUserInteractionEnabled:YES];
-        [[self flutterViewControllerCore] setInitialRoute:self.routeUrl];
     }
 }
 
 - (void)showSnapView {
+    self.snapView = [self.view snapshotViewAfterScreenUpdates:NO];
     [self.view setUserInteractionEnabled:FALSE];
     self.view = self.snapView;
-}
-
-- (void)takeSnapShot {
-    self.snapView = [self.view snapshotViewAfterScreenUpdates:NO];
-}
-
-- (FlutterViewController*)flutterViewController:(UIView*)view {
-    // Find the first view controller in the responder chain and see if it is a FlutterViewController.
-    for (UIResponder* responder = view.nextResponder; responder != nil;
-         responder = responder.nextResponder) {
-        if ([responder isKindOfClass:[UIViewController class]]) {
-            if ([responder isKindOfClass:[FlutterViewController class]]) {
-                return reinterpret_cast<FlutterViewController*>(responder);
-            } else {
-                return nil;
-            }
-        }
-    }
-    return nil;
 }
 
 @end

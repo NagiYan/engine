@@ -65,6 +65,7 @@
 
 static FlutterViewControllerCore *_flutterViewControllerCore;
 static dispatch_once_t onceToken;
+static dispatch_once_t onceTokenEngine;
 
 + (instancetype)sharedInstance:(FlutterDartProject*)projectOrNil withFlutterViewController:(FlutterViewController*)viewController {
     if(_flutterViewControllerCore) {
@@ -105,6 +106,7 @@ static dispatch_once_t onceToken;
     if (_flutterViewControllerCore) {
         [[FlutterViewControllerCore sharedInstance:nil withFlutterViewController:nil] clean];
         onceToken = 0;
+        onceTokenEngine = 0;
         [_flutterViewControllerCore release];
         _flutterViewControllerCore = nil;
     }
@@ -427,23 +429,20 @@ static dispatch_once_t onceToken;
 - (void)viewWillAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewWillAppear");
     
-//    static dispatch_once_t onceToken;
-//    dispatch_once(&onceToken, ^{
-//
-//    });
-
-    // Launch the Dart application with the inferred run configuration.
-    _shell->GetTaskRunners().GetUITaskRunner()->PostTask(
-                                                         fml::MakeCopyable([engine = _shell->GetEngine(),                   //
-                                                                            config = [_dartProject.get() runConfiguration]  //
-                                                                            ]() mutable {
-        if (engine) {
-            auto result = engine->Run(std::move(config));
-            if (!result) {
-                FML_LOG(ERROR) << "Could not launch engine with configuration.";
+    dispatch_once(&onceTokenEngine, ^{
+        // Launch the Dart application with the inferred run configuration.
+        _shell->GetTaskRunners().GetUITaskRunner()->PostTask(
+                                                             fml::MakeCopyable([engine = _shell->GetEngine(),                   //
+                                                                                config = [_dartProject.get() runConfiguration]  //
+                                                                                ]() mutable {
+            if (engine) {
+                auto result = engine->Run(std::move(config));
+                if (!result) {
+                    FML_LOG(ERROR) << "Could not launch engine with configuration.";
+                }
             }
-        }
-    }));
+        }));
+    });
     
   // Only recreate surface on subsequent appearances when viewport metrics are known.
   // First time surface creation is done on viewDidLayoutSubviews.
@@ -468,8 +467,10 @@ static dispatch_once_t onceToken;
 
 - (void)viewDidDisappear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidDisappear");
-  [self surfaceUpdated:NO];
-  [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.paused"];
+    if (![_flutterView nextResponder]) {
+        [self surfaceUpdated:NO];
+        [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.paused"];
+    }
 }
 
 - (void)dealloc {
