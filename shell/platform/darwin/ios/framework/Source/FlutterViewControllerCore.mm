@@ -495,13 +495,37 @@ static dispatch_once_t onceTokenEngine;
   TRACE_EVENT0("flutter", "applicationDidEnterBackground");
   [self surfaceUpdated:NO];
   [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.paused"];
+    [self enableMessageLoop:false forTaskRunner:@"io.flutter.io"];
+    [self enableMessageLoop:false forTaskRunner:@"io.flutter.gpu"];
 }
 
 - (void)applicationWillEnterForeground:(NSNotification*)notification {
   TRACE_EVENT0("flutter", "applicationWillEnterForeground");
+    [self enableMessageLoop:true forTaskRunner:@"io.flutter.gpu"];
+    [self enableMessageLoop:true forTaskRunner:@"io.flutter.io"];
   if (_viewportMetrics.physical_width)
     [self surfaceUpdated:YES];
   [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.inactive"];
+
+}
+
+- (void)enableMessageLoop:(bool)isEnable forTaskRunner:(NSString *)aTaskRunnerId{
+    if( [@"io.flutter.io" caseInsensitiveCompare:aTaskRunnerId] == NSOrderedSame ) {
+        fml::TaskRunner *taskRunner = (fml::TaskRunner *)_shell->GetTaskRunners().GetIOTaskRunner().get();
+        taskRunner->EnableMessageLoop(isEnable);
+    }
+    if( [@"io.flutter.ui" caseInsensitiveCompare:aTaskRunnerId] == NSOrderedSame ) {
+        fml::TaskRunner *taskRunner = (fml::TaskRunner *)_shell->GetTaskRunners().GetUITaskRunner().get();
+        taskRunner->EnableMessageLoop(isEnable);
+    }
+    if( [@"io.flutter.gpu" caseInsensitiveCompare:aTaskRunnerId] == NSOrderedSame ) {
+        fml::TaskRunner *taskRunner = (fml::TaskRunner *)_shell->GetTaskRunners().GetGPUTaskRunner().get();
+        taskRunner->EnableMessageLoop(isEnable);
+    }
+    if( [@"io.flutter.platform" caseInsensitiveCompare:aTaskRunnerId] == NSOrderedSame ) {
+        fml::TaskRunner *taskRunner = (fml::TaskRunner *)_shell->GetTaskRunners().GetPlatformTaskRunner().get();
+        taskRunner->EnableMessageLoop(isEnable);
+    }
 }
 
 #pragma mark - Touch event handling

@@ -213,7 +213,6 @@
         self.view = [[self flutterViewControllerCore] flutterView];
         [[self flutterViewControllerCore] updateHolder:self];
         //NSLog(@"ASCFlutter FlutterViewControllerCore updateHolder %@", self);
-        [self.navigationController setNavigationBarHidden:YES animated:NO];
         [self.view setUserInteractionEnabled:YES];
     }
 }
