@@ -725,7 +725,7 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
   _viewportMetrics.physical_width = viewSize.width * scale;
   _viewportMetrics.physical_height = viewSize.height * scale;
 
-  [self updateViewportPadding];
+    [self updateViewportPadding:NO];
   [self updateViewportMetrics];
 
   // This must run after updateViewportMetrics so that the surface creation tasks are queued after
@@ -735,17 +735,20 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
 }
 
 - (void)viewSafeAreaInsetsDidChange {
-  [self updateViewportPadding];
+    [self updateViewportPadding:YES];
   [self updateViewportMetrics];
 }
 
 // Updates _viewportMetrics physical padding.
 //
 // Viewport padding represents the iOS safe area insets.
-- (void)updateViewportPadding {
+- (void)updateViewportPadding:(BOOL)filter {
   CGFloat scale = [UIScreen mainScreen].scale;
   if (@available(iOS 11, *)) {
-    _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+      // 解决从后台进入前台导致错误下移 横屏可能会有问题
+      if (!filter) {
+          _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+      }
     _viewportMetrics.physical_padding_left = self.flutterView.safeAreaInsets.left * scale;
     _viewportMetrics.physical_padding_right = self.flutterView.safeAreaInsets.right * scale;
     _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
