@@ -345,6 +345,11 @@ static dispatch_once_t onceTokenEngine;
              selector:@selector(onUserSettingsChanged:)
                  name:UIContentSizeCategoryDidChangeNotification
                object:nil];
+    
+    [center addObserver:self
+               selector:@selector(onLocaleChange:)
+                   name:@"kASCLocalChangeNotification"
+                 object:nil];
 }
 
 - (void)setInitialRoute:(NSString*)route {
@@ -455,7 +460,7 @@ static dispatch_once_t onceTokenEngine;
 
 - (void)viewDidAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidAppear");
-  [self onLocaleUpdated:nil];
+//  [self onLocaleUpdated:nil];
   [self onUserSettingsChanged:nil];
   [self onAccessibilityStatusChanged:nil];
   [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.resumed"];
@@ -747,7 +752,10 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
   if (@available(iOS 11, *)) {
       // 解决从后台进入前台导致错误下移 横屏可能会有问题
       if (!filter) {
-          _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+          CGFloat change = self.flutterView.safeAreaInsets.top * scale - _viewportMetrics.physical_padding_top;
+          if (_viewportMetrics.physical_padding_top == 0 || (change != 88 && change != 132)) {
+              _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+          }
       }
     _viewportMetrics.physical_padding_left = self.flutterView.safeAreaInsets.left * scale;
     _viewportMetrics.physical_padding_right = self.flutterView.safeAreaInsets.right * scale;
@@ -892,6 +900,16 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
   NSString* countryCode = [currentLocale objectForKey:NSLocaleCountryCode];
   if (languageCode && countryCode)
     [_localizationChannel.get() invokeMethod:@"setLocale" arguments:@[ languageCode, countryCode ]];
+}
+
+- (void)onLocaleChange:(NSNotification*)notification {
+    NSString* languageCode =  notification.userInfo[@"languageCode"];
+    NSString* countryCode = notification.userInfo[@"countryCode"];
+    if (!countryCode) {
+        countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
+    }
+    if (languageCode && countryCode)
+        [_localizationChannel.get() invokeMethod:@"setLocale" arguments:@[ languageCode, countryCode ]];
 }
 
 #pragma mark - Set user settings
