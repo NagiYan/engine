@@ -511,7 +511,6 @@ static dispatch_once_t onceTokenEngine;
 - (void)applicationWillEnterForeground:(NSNotification*)notification {
   TRACE_EVENT0("flutter", "applicationWillEnterForeground");
   [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.inactive"];
-
 }
 
 - (void)disableGPUOperation{
@@ -593,6 +592,10 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
 }
 
 - (void)dispatchTouches:(NSSet*)touches phase:(UITouchPhase)phase {
+    
+    if (![_flutterView nextResponder])
+        return;
+    
   // Note: we cannot rely on touch.phase, since in some cases, e.g.,
   // handleStatusBarTouches, we synthesize touches from existing events.
   //
@@ -721,6 +724,10 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
 }
 
 - (void)viewDidLayoutSubviews {
+    
+    if (![_flutterView nextResponder])
+        return;
+    
   CGSize viewSize = self.flutterView.bounds.size;
   CGFloat scale = [UIScreen mainScreen].scale;
 
@@ -768,16 +775,20 @@ static inline blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* to
 #pragma mark - Keyboard events
 
 - (void)keyboardWillChangeFrame:(NSNotification*)notification {
-  NSDictionary* info = [notification userInfo];
-  CGFloat bottom = CGRectGetHeight([[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue]);
-  CGFloat scale = [UIScreen mainScreen].scale;
-  _viewportMetrics.physical_view_inset_bottom = bottom * scale;
-  [self updateViewportMetrics];
+    if ([_flutterView nextResponder]) {
+        NSDictionary* info = [notification userInfo];
+        CGFloat bottom = CGRectGetHeight([[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue]);
+        CGFloat scale = [UIScreen mainScreen].scale;
+        _viewportMetrics.physical_view_inset_bottom = bottom * scale;
+        [self updateViewportMetrics];
+    }
 }
 
 - (void)keyboardWillBeHidden:(NSNotification*)notification {
-  _viewportMetrics.physical_view_inset_bottom = 0;
-  [self updateViewportMetrics];
+    if ([_flutterView nextResponder]) {
+        _viewportMetrics.physical_view_inset_bottom = 0;
+        [self updateViewportMetrics];
+    }
 }
 
 #pragma mark - Text input delegate
