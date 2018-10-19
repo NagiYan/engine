@@ -7,10 +7,12 @@
 #include "flutter/fml/arraysize.h"
 #include "flutter/fml/logging.h"
 #include "flutter/fml/trace_event.h"
+#include "flutter/shell/common/persistent_cache.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrContextOptions.h"
+#include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 
 // These are common defines present on all OpenGL headers. However, we don't
@@ -20,6 +22,7 @@
 #define GPU_GL_RGBA8 0x8058
 #define GPU_GL_RGBA4 0x8056
 #define GPU_GL_RGB565 0x8D62
+#define GPU_GL_VERSION 0x1F02
 
 #ifdef ERROR
 #undef ERROR
@@ -34,6 +37,9 @@ static const int kGrCacheMaxCount = 8192;
 // cache.
 static const size_t kGrCacheMaxByteSize = 512 * (1 << 20);
 
+// Version string prefix that identifies an OpenGL ES implementation.
+static const char kGLESVersionPrefix[] = "OpenGL ES";
+
 GPUSurfaceGL::GPUSurfaceGL(GPUSurfaceGLDelegate* delegate)
     : delegate_(delegate), weak_factory_(this) {
   if (!delegate_->GLContextMakeCurrent()) {
@@ -42,14 +48,38 @@ GPUSurfaceGL::GPUSurfaceGL(GPUSurfaceGLDelegate* delegate)
     return;
   }
 
+  proc_resolver_ = delegate_->GetGLProcResolver();
+
   GrContextOptions options;
+
+  options.fPersistentCache = PersistentCache::GetCacheForProcess();
+
   options.fAvoidStencilBuffers = true;
 
   // To get video playback on the widest range of devices, we limit Skia to
   // ES2 shading language when the ES3 external image extension is missing.
   options.fPreferExternalImagesOverES3 = true;
 
-  auto context = GrContext::MakeGL(GrGLMakeNativeInterface(), options);
+  sk_sp<const GrGLInterface> interface;
+
+  if (proc_resolver_ == nullptr) {
+    interface = GrGLMakeNativeInterface();
+  } else {
+    auto gl_get_proc = [](void* context,
+                          const char gl_proc_name[]) -> GrGLFuncPtr {
+      return reinterpret_cast<GrGLFuncPtr>(
+          reinterpret_cast<GPUSurfaceGL*>(context)->proc_resolver_(
+              gl_proc_name));
+    };
+
+    if (IsProcResolverOpenGLES()) {
+      interface = GrGLMakeAssembledGLESInterface(this, gl_get_proc);
+    } else {
+      interface = GrGLMakeAssembledGLInterface(this, gl_get_proc);
+    }
+  }
+
+  auto context = GrContext::MakeGL(interface, options);
 
   if (context == nullptr) {
     FML_LOG(ERROR) << "Failed to setup Skia Gr context.";
@@ -83,6 +113,21 @@ GPUSurfaceGL::~GPUSurfaceGL() {
   delegate_->GLContextClearCurrent();
 }
 
+bool GPUSurfaceGL::IsProcResolverOpenGLES() {
+  using GLGetStringProc = const char* (*)(uint32_t);
+  GLGetStringProc gl_get_string =
+      reinterpret_cast<GLGetStringProc>(proc_resolver_("glGetString"));
+  FML_CHECK(gl_get_string)
+      << "The GL proc resolver could not resolve glGetString";
+  const char* gl_version_string = gl_get_string(GPU_GL_VERSION);
+  FML_CHECK(gl_version_string)
+      << "The GL proc resolver's glGetString(GL_VERSION) failed";
+
+  return strncmp(gl_version_string, kGLESVersionPrefix,
+                 strlen(kGLESVersionPrefix)) == 0;
+}
+
+// |shell::Surface|
 bool GPUSurfaceGL::IsValid() {
   return valid_;
 }
@@ -110,8 +155,8 @@ static sk_sp<SkSurface> WrapOnscreenSurface(GrContext* context,
   framebuffer_info.fFBOID = static_cast<GrGLuint>(fbo);
   framebuffer_info.fFormat = format;
 
-  GrBackendRenderTarget render_target(size.fWidth,      // width
-                                      size.fHeight,     // height
+  GrBackendRenderTarget render_target(size.width(),     // width
+                                      size.height(),    // height
                                       0,                // sample count
                                       0,                // stencil bits (TODO)
                                       framebuffer_info  // framebuffer info
@@ -168,7 +213,10 @@ bool GPUSurfaceGL::CreateOrUpdateSurfaces(const SkISize& size) {
   sk_sp<SkSurface> onscreen_surface, offscreen_surface;
 
   onscreen_surface =
-      WrapOnscreenSurface(context_.get(), size, delegate_->GLContextFBO());
+      WrapOnscreenSurface(context_.get(),            // GL context
+                          size,                      // root surface size
+                          delegate_->GLContextFBO()  // window FBO ID
+      );
 
   if (onscreen_surface == nullptr) {
     // If the onscreen surface could not be wrapped. There is absolutely no
@@ -191,6 +239,12 @@ bool GPUSurfaceGL::CreateOrUpdateSurfaces(const SkISize& size) {
   return true;
 }
 
+// |shell::Surface|
+SkMatrix GPUSurfaceGL::GetRootTransformation() const {
+  return delegate_->GLContextSurfaceTransformation();
+}
+
+// |shell::Surface|
 std::unique_ptr<SurfaceFrame> GPUSurfaceGL::AcquireFrame(const SkISize& size) {
   if (delegate_ == nullptr) {
     return nullptr;
@@ -202,11 +256,16 @@ std::unique_ptr<SurfaceFrame> GPUSurfaceGL::AcquireFrame(const SkISize& size) {
     return nullptr;
   }
 
-  sk_sp<SkSurface> surface = AcquireRenderSurface(size);
+  const auto root_surface_transformation = GetRootTransformation();
+
+  sk_sp<SkSurface> surface =
+      AcquireRenderSurface(size, root_surface_transformation);
 
   if (surface == nullptr) {
     return nullptr;
   }
+
+  surface->getCanvas()->setMatrix(root_surface_transformation);
 
   SurfaceFrame::SubmitCallback submit_callback =
       [weak = weak_factory_.GetWeakPtr()](const SurfaceFrame& surface_frame,
@@ -234,19 +293,49 @@ bool GPUSurfaceGL::PresentSurface(SkCanvas* canvas) {
     onscreen_surface_->getCanvas()->flush();
   }
 
-  delegate_->GLContextPresent();
+  if (!delegate_->GLContextPresent()) {
+    return false;
+  }
+
+  if (delegate_->GLContextFBOResetAfterPresent()) {
+    auto current_size =
+        SkISize::Make(onscreen_surface_->width(), onscreen_surface_->height());
+
+    // The FBO has changed, ask the delegate for the new FBO and do a surface
+    // re-wrap.
+    auto new_onscreen_surface =
+        WrapOnscreenSurface(context_.get(),            // GL context
+                            current_size,              // root surface size
+                            delegate_->GLContextFBO()  // window FBO ID
+        );
+
+    if (!new_onscreen_surface) {
+      return false;
+    }
+
+    onscreen_surface_ = std::move(new_onscreen_surface);
+  }
 
   return true;
 }
 
-sk_sp<SkSurface> GPUSurfaceGL::AcquireRenderSurface(const SkISize& size) {
-  if (!CreateOrUpdateSurfaces(size)) {
+sk_sp<SkSurface> GPUSurfaceGL::AcquireRenderSurface(
+    const SkISize& untransformed_size,
+    const SkMatrix& root_surface_transformation) {
+  const auto transformed_rect = root_surface_transformation.mapRect(
+      SkRect::MakeWH(untransformed_size.width(), untransformed_size.height()));
+
+  const auto transformed_size =
+      SkISize::Make(transformed_rect.width(), transformed_rect.height());
+
+  if (!CreateOrUpdateSurfaces(transformed_size)) {
     return nullptr;
   }
 
   return offscreen_surface_ != nullptr ? offscreen_surface_ : onscreen_surface_;
 }
 
+// |shell::Surface|
 GrContext* GPUSurfaceGL::GetContext() {
   return context_.get();
 }

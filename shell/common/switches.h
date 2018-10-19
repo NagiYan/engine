@@ -54,7 +54,8 @@ DEF_SWITCH(DartFlags,
            "by the Flutter shell.")
 DEF_SWITCH(DeviceObservatoryPort,
            "observatory-port",
-           "A custom Dart Observatory port. The default is 8181.")
+           "A custom Dart Observatory port. The default is to pick a randomly "
+           "available open port.")
 DEF_SWITCH(DisableObservatory,
            "disable-observatory",
            "Disable the Dart Observatory. The observatory is never available "
@@ -93,7 +94,6 @@ DEF_SWITCH(Help, "help", "Display this help text.")
 DEF_SWITCH(LogTag, "log-tag", "Tag associated with log messages.")
 DEF_SWITCH(MainDartFile, "dart-main", "The path to the main Dart file.")
 DEF_SWITCH(Packages, "packages", "Specify the path to the packages.")
-DEF_SWITCH(Snapshot, "snapshot-blob", "Specify the path to the snapshot blob")
 DEF_SWITCH(StartPaused,
            "start-paused",
            "Start the application paused in the Dart debugger.")

@@ -19,7 +19,7 @@
 #include "flutter/shell/common/shell.h"
 #include "flutter/shell/common/switches.h"
 #include "flutter/shell/common/thread_host.h"
-#include "third_party/dart/runtime/bin/embedded_dart_io.h"
+#include "third_party/dart/runtime/include/bin/dart_io_api.h"
 
 #ifdef ERROR
 #undef ERROR
@@ -129,15 +129,16 @@ int RunTester(const blink::Settings& settings, bool run_forever) {
     return EXIT_FAILURE;
   }
 
+  std::initializer_list<fml::FileMapping::Protection> protection = {
+      fml::FileMapping::Protection::kRead};
   auto main_dart_file_mapping = std::make_unique<fml::FileMapping>(
-      fml::paths::AbsolutePath(settings.main_dart_file_path), false);
+      fml::OpenFile(
+          fml::paths::AbsolutePath(settings.main_dart_file_path).c_str(), false,
+          fml::FilePermission::kRead),
+      protection);
 
   auto isolate_configuration =
-      blink::DartVM::IsKernelMapping(main_dart_file_mapping.get())
-          ? IsolateConfiguration::CreateForSnapshot(
-                std::move(main_dart_file_mapping))
-          : IsolateConfiguration::CreateForSource(settings.main_dart_file_path,
-                                                  settings.packages_file_path);
+      IsolateConfiguration::CreateForKernel(std::move(main_dart_file_mapping));
 
   if (!isolate_configuration) {
     FML_LOG(ERROR) << "Could create isolate configuration.";
@@ -148,8 +149,8 @@ int RunTester(const blink::Settings& settings, bool run_forever) {
   asset_manager->PushBack(std::make_unique<blink::DirectoryAssetBundle>(
       fml::Duplicate(settings.assets_dir)));
   asset_manager->PushBack(
-      std::make_unique<blink::DirectoryAssetBundle>(fml::OpenFile(
-          settings.assets_path.c_str(), fml::OpenPermission::kRead, true)));
+      std::make_unique<blink::DirectoryAssetBundle>(fml::OpenDirectory(
+          settings.assets_path.c_str(), false, fml::FilePermission::kRead)));
 
   RunConfiguration run_configuration(std::move(isolate_configuration),
                                      std::move(asset_manager));
@@ -175,7 +176,8 @@ int RunTester(const blink::Settings& settings, bool run_forever) {
         fml::MessageLoop::GetCurrent().AddTaskObserver(
             reinterpret_cast<intptr_t>(&completion_observer),
             [&completion_observer]() { completion_observer.DidProcessTask(); });
-        if (engine->Run(std::move(config))) {
+        if (engine->Run(std::move(config)) !=
+            shell::Engine::RunStatus::Failure) {
           engine_did_run = true;
 
           blink::ViewportMetrics metrics;
@@ -241,9 +243,6 @@ int main(int argc, char* argv[]) {
   }
 
   settings.icu_data_path = "icudtl.dat";
-
-  settings.platform_kernel_path =
-      fml::paths::JoinPaths({settings.assets_path, "platform_strong.dill"});
 
   // The tools that read logs get confused if there is a log tag specified.
   settings.log_tag = "";

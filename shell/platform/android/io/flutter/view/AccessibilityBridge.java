@@ -5,7 +5,6 @@
 package io.flutter.view;
 
 import android.app.Activity;
-import android.content.Context;
 import android.graphics.Rect;
 import android.opengl.Matrix;
 import android.os.Build;
@@ -144,6 +143,10 @@ class AccessibilityBridge
         }
 
         AccessibilityNodeInfo result = AccessibilityNodeInfo.obtain(mOwner, virtualViewId);
+        // Work around for https://github.com/flutter/flutter/issues/2101
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            result.setViewIdResourceName("");
+        }
         result.setPackageName(mOwner.getContext().getPackageName());
         result.setClassName("android.view.View");
         result.setSource(mOwner, virtualViewId);
@@ -167,7 +170,9 @@ class AccessibilityBridge
                 // Text fields will always be created as a live region, so that updates to
                 // the label trigger polite announcements. This makes it easy to follow a11y
                 // guidelines for text fields on Android.
-                result.setLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                    result.setLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+                }
             }
 
             // Cursor movements
@@ -211,7 +216,7 @@ class AccessibilityBridge
             // TODO(jonahwilliams): Figure out a way conform to the expected id from TalkBack's
             // CustomLabelManager. talkback/src/main/java/labeling/CustomLabelManager.java#L525
         }
-        if (object.hasAction(Action.DISMISS)) {
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2 && object.hasAction(Action.DISMISS)) {
             result.setDismissable(true);
             result.addAction(AccessibilityNodeInfo.ACTION_DISMISS);
         }
@@ -292,7 +297,7 @@ class AccessibilityBridge
                 result.addAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD);
             }
         }
-        if (object.hasFlag(Flag.IS_LIVE_REGION)) {
+        if (object.hasFlag(Flag.IS_LIVE_REGION) && Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2) {
             result.setLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         }
 
@@ -302,6 +307,7 @@ class AccessibilityBridge
         result.setCheckable(hasCheckedState || hasToggledState);
         if (hasCheckedState) {
             result.setChecked(object.hasFlag(Flag.IS_CHECKED));
+            result.setContentDescription(object.getValueLabelHint());
             if (object.hasFlag(Flag.IS_IN_MUTUALLY_EXCLUSIVE_GROUP))
                 result.setClassName("android.widget.RadioButton");
             else
@@ -309,10 +315,14 @@ class AccessibilityBridge
         } else if (hasToggledState) {
             result.setChecked(object.hasFlag(Flag.IS_TOGGLED));
             result.setClassName("android.widget.Switch");
+            result.setContentDescription(object.getValueLabelHint());
+        } else {
+            // Setting the text directly instead of the content description
+            // will replace the "checked" or "not-checked" label.
+            result.setText(object.getValueLabelHint());
         }
 
         result.setSelected(object.hasFlag(Flag.IS_SELECTED));
-        result.setText(object.getValueLabelHint());
 
         // Accessibility Focus
         if (mA11yFocusedObject != null && mA11yFocusedObject.id == virtualViewId) {
@@ -589,8 +599,6 @@ class AccessibilityBridge
     }
 
     void updateCustomAccessibilityActions(ByteBuffer buffer, String[] strings) {
-        ArrayList<CustomAccessibilityAction> updatedActions =
-                new ArrayList<CustomAccessibilityAction>();
         while (buffer.hasRemaining()) {
             int id = buffer.getInt();
             CustomAccessibilityAction action = getOrCreateAction(id);
@@ -625,7 +633,7 @@ class AccessibilityBridge
         if (rootObject != null) {
             final float[] identity = new float[16];
             Matrix.setIdentityM(identity, 0);
-            // in android devices above AP 23, the system nav bar can be placed on the left side
+            // in android devices API 23 and above, the system nav bar can be placed on the left side
             // of the screen in landscape mode. We must handle the translation ourselves for the
             // a11y nodes.
             if (Build.VERSION.SDK_INT >= 23) {
@@ -710,10 +718,37 @@ class AccessibilityBridge
                     event.setScrollX((int) position);
                     event.setMaxScrollX((int) max);
                 }
+                if (object.scrollChildren > 0) {
+                    // We don't need to add 1 to the scroll index because TalkBack does this automagically.
+                    event.setItemCount(object.scrollChildren);
+                    event.setFromIndex(object.scrollIndex);
+                    int visibleChildren = 0;
+                    // handle hidden children at the beginning and end of the list.
+                    for (SemanticsObject child : object.childrenInHitTestOrder) {
+                        if (!child.hasFlag(Flag.IS_HIDDEN)) {
+                            visibleChildren += 1;
+                        }
+                    }
+                    assert(object.scrollIndex + visibleChildren <= object.scrollChildren);
+                    assert(!object.childrenInHitTestOrder.get(object.scrollIndex).hasFlag(Flag.IS_HIDDEN));
+                    // The setToIndex should be the index of the last visible child. Because we counted all
+                    // children, including the first index we need to subtract one.
+                    //
+                    //   [0, 1, 2, 3, 4, 5]
+                    //    ^     ^
+                    // In the example above where 0 is the first visible index and 2 is the last, we will
+                    // count 3 total visible children. We then subtract one to get the correct last visible
+                    // index of 2.
+                    event.setToIndex(object.scrollIndex + visibleChildren - 1);
+                }
                 sendAccessibilityEvent(event);
             }
-            if (object.hasFlag(Flag.IS_LIVE_REGION) && !object.hadFlag(Flag.IS_LIVE_REGION)) {
-                sendAccessibilityEvent(object.id, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            if (object.hasFlag(Flag.IS_LIVE_REGION)) {
+                String label = object.label == null ? "" : object.label;
+                String previousLabel = object.previousLabel == null ? "" : object.label;
+                if (!label.equals(previousLabel) || !object.hadFlag(Flag.IS_LIVE_REGION)) {
+                    sendAccessibilityEvent(object.id, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+                }
             } else if (object.hasFlag(Flag.IS_TEXT_FIELD) && object.didChangeLabel()
                     && mInputFocusedObject != null && mInputFocusedObject.id == object.id) {
                 // Text fields should announce when their label changes while focused. We use a live
@@ -844,17 +879,6 @@ class AccessibilityBridge
                 sendAccessibilityEvent(e);
                 break;
             }
-            // Requires that the node id provided corresponds to a live region, or TalkBack will
-            // ignore the event. The event will cause talkback to read out the new label even
-            // if node is not focused.
-            case "updateLiveRegion": {
-                Integer nodeId = (Integer) annotatedEvent.get("nodeId");
-                if (nodeId == null) {
-                    return;
-                }
-                sendAccessibilityEvent(nodeId, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-                break;
-            }
         }
     }
 
@@ -940,6 +964,8 @@ class AccessibilityBridge
         int actions;
         int textSelectionBase;
         int textSelectionExtent;
+        int scrollChildren;
+        int scrollIndex;
         float scrollPosition;
         float scrollExtentMax;
         float scrollExtentMin;
@@ -1041,6 +1067,8 @@ class AccessibilityBridge
             actions = buffer.getInt();
             textSelectionBase = buffer.getInt();
             textSelectionExtent = buffer.getInt();
+            scrollChildren = buffer.getInt();
+            scrollIndex = buffer.getInt();
             scrollPosition = buffer.getFloat();
             scrollExtentMax = buffer.getFloat();
             scrollExtentMin = buffer.getFloat();

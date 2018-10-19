@@ -5,6 +5,8 @@
 source_set("fml") {
   sources = [
     "arraysize.h",
+    "base32.cc",
+    "base32.h",
     "build_config.h",
     "closure.h",
     "command_line.cc",
@@ -12,6 +14,7 @@ source_set("fml") {
     "compiler_specific.h",
     "eintr_wrapper.h",
     "export.h",
+    "file.cc",
     "file.h",
     "icu_util.cc",
     "icu_util.h",
@@ -32,6 +35,8 @@ source_set("fml") {
     "memory/weak_ptr.h",
     "memory/weak_ptr_internal.cc",
     "memory/weak_ptr_internal.h",
+    "message.cc",
+    "message.h",
     "message_loop.cc",
     "message_loop.h",
     "message_loop_impl.cc",
@@ -41,6 +46,8 @@ source_set("fml") {
     "paths.h",
     "string_view.cc",
     "string_view.h",
+    "synchronization/count_down_latch.cc",
+    "synchronization/count_down_latch.h",
     "synchronization/thread_annotations.h",
     "synchronization/thread_checker.h",
     "synchronization/waitable_event.cc",
@@ -102,6 +109,7 @@ source_set("fml") {
       "platform/android/message_loop_android.cc",
       "platform/android/message_loop_android.h",
       "platform/android/paths_android.cc",
+      "platform/android/paths_android.h",
       "platform/android/scoped_java_ref.cc",
       "platform/android/scoped_java_ref.h",
     ]
@@ -137,6 +145,8 @@ source_set("fml") {
 
   if (is_win) {
     sources += [
+      "platform/win/errors_win.cc",
+      "platform/win/errors_win.h",
       "platform/win/file_win.cc",
       "platform/win/mapping_win.cc",
       "platform/win/message_loop_win.cc",
@@ -159,11 +169,16 @@ executable("fml_unittests") {
   testonly = true
 
   sources = [
+    "base32_unittest.cc",
     "command_line_unittest.cc",
+    "file_unittest.cc",
     "memory/ref_counted_unittest.cc",
     "memory/weak_ptr_unittest.cc",
     "message_loop_unittests.cc",
+    "message_unittests.cc",
+    "paths_unittests.cc",
     "string_view_unittest.cc",
+    "synchronization/count_down_latch_unittests.cc",
     "synchronization/thread_annotations_unittest.cc",
     "synchronization/thread_checker_unittest.cc",
     "synchronization/waitable_event_unittest.cc",
