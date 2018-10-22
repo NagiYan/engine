@@ -29,6 +29,8 @@
 
 - (void)handleStatusBarTouches:(UIEvent*)event;
 
+- (void)setFlutterViewDidRenderCallback:(void (^)(void))callback;
+
 /**
  Returns the file name for the given asset.
  The returned file name can be used to access the asset in the application's main bundle.
@@ -56,6 +58,20 @@
  */
 - (void)setInitialRoute:(NSString*)route;
 
+/**
+ Instructs the Flutter Navigator (if any) to go back.
+ */
+- (void)popRoute;
+
+/**
+ Instructs the Flutter Navigator (if any) to push a route on to the navigation
+ stack.  The setInitialRoute method should be prefered if this is called before the
+ FlutterViewController has come into view.
+ 
+ - Parameter route: The name of the route to push to the navigation stack.
+ */
+- (void)pushRoute:(NSString*)route;
+
 #pragma mark - proxy interface
 - (id<FlutterPluginRegistry>)pluginRegistry;
 
@@ -75,7 +91,7 @@
 - (void)viewDidLayoutSubviews;
 - (void)viewSafeAreaInsetsDidChange;
 
-- (void)dispatchTouches:(NSSet*)touches phase:(UITouchPhase)phase;
+- (void)dispatchTouches:(NSSet*)touches pointerDataChangeOverride:(blink::PointerData::Change*)overridden_change;
 @end
 
 #endif  // FLUTTER_FLUTTERVIEWCONTROLLERCORE_H_

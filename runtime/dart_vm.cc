@@ -23,7 +23,7 @@
 #include "flutter/runtime/dart_isolate.h"
 #include "flutter/runtime/dart_service_isolate.h"
 #include "flutter/runtime/start_up.h"
-#include "third_party/dart/runtime/bin/embedded_dart_io.h"
+#include "third_party/dart/runtime/include/bin/dart_io_api.h"
 #include "third_party/tonic/converter/dart_converter.h"
 #include "third_party/tonic/dart_class_library.h"
 #include "third_party/tonic/dart_class_provider.h"
@@ -64,7 +64,6 @@ static const char* kDartLanguageArgs[] = {
     // clang-format off
     "--enable_mirrors=false",
     "--background_compilation",
-    "--await_is_keyword",
     "--causal_async_stacks",
     // clang-format on
 };
@@ -81,22 +80,6 @@ static const char* kDartWriteProtectCodeArgs[] = {
 static const char* kDartAssertArgs[] = {
     // clang-format off
     "--enable_asserts",
-    // clang-format on
-};
-
-static const char* kDartCheckedModeArgs[] = {
-    // clang-format off
-    "--enable_type_checks",
-    "--error_on_bad_type",
-    "--error_on_bad_override",
-    // clang-format on
-};
-
-static const char* kDartStrongModeArgs[] = {
-    // clang-format off
-    "--strong",
-    "--reify_generic_functions",
-    "--sync_async",
     // clang-format on
 };
 
@@ -156,7 +139,9 @@ Dart_Handle GetVMServiceAssetsArchiveCallback() {
     (FLUTTER_RUNTIME_MODE == FLUTTER_RUNTIME_MODE_DYNAMIC_RELEASE)
   return nullptr;
 #elif OS_FUCHSIA
-  fml::FileMapping mapping("pkg/data/observatory.tar", false /* executable */);
+  fml::UniqueFD fd = fml::OpenFile("pkg/data/observatory.tar", false,
+                                   fml::FilePermission::kRead);
+  fml::FileMapping mapping(fd, {fml::FileMapping::Protection::kRead});
   if (mapping.GetSize() == 0 || mapping.GetMapping() == nullptr) {
     FML_LOG(ERROR) << "Fail to load Observatory archive";
     return nullptr;
@@ -257,6 +242,7 @@ fml::RefPtr<DartVM> DartVM::ForProcess(Settings settings) {
 }
 
 static std::once_flag gVMInitialization;
+static std::mutex gVMMutex;
 static fml::RefPtr<DartVM> gVM;
 
 fml::RefPtr<DartVM> DartVM::ForProcess(
@@ -264,6 +250,7 @@ fml::RefPtr<DartVM> DartVM::ForProcess(
     fml::RefPtr<DartSnapshot> vm_snapshot,
     fml::RefPtr<DartSnapshot> isolate_snapshot,
     fml::RefPtr<DartSnapshot> shared_snapshot) {
+  std::lock_guard<std::mutex> lock(gVMMutex);
   std::call_once(gVMInitialization, [settings,          //
                                      vm_snapshot,       //
                                      isolate_snapshot,  //
@@ -296,6 +283,7 @@ fml::RefPtr<DartVM> DartVM::ForProcess(
 }
 
 fml::RefPtr<DartVM> DartVM::ForProcessIfInitialized() {
+  std::lock_guard<std::mutex> lock(gVMMutex);
   return gVM;
 }
 
@@ -307,8 +295,6 @@ DartVM::DartVM(const Settings& settings,
       vm_snapshot_(std::move(vm_snapshot)),
       isolate_snapshot_(std::move(isolate_snapshot)),
       shared_snapshot_(std::move(shared_snapshot)),
-      platform_kernel_mapping_(
-          std::make_unique<fml::FileMapping>(settings.platform_kernel_path)),
       weak_factory_(this) {
   TRACE_EVENT0("flutter", "DartVMInitializer");
   FML_DLOG(INFO) << "Attempting Dart VM launch for mode: "
@@ -365,29 +351,8 @@ DartVM::DartVM(const Settings& settings,
               arraysize(kDartWriteProtectCodeArgs));
 #endif
 
-  const bool isolate_snapshot_is_dart_2 =
-      Dart_IsDart2Snapshot(isolate_snapshot_->GetData()->GetSnapshotPointer());
-
-  const bool is_preview_dart2 =
-      (platform_kernel_mapping_->GetSize() > 0) || isolate_snapshot_is_dart_2;
-
-  FML_DLOG(INFO) << "Dart 2 " << (is_preview_dart2 ? "is" : "is NOT")
-                 << " enabled. Platform kernel: "
-                 << static_cast<bool>(platform_kernel_mapping_->GetSize() > 0)
-                 << " Isolate Snapshot is Dart 2: "
-                 << isolate_snapshot_is_dart_2;
-
-  if (is_preview_dart2) {
-    PushBackAll(&args, kDartStrongModeArgs, arraysize(kDartStrongModeArgs));
-    if (use_checked_mode) {
-      PushBackAll(&args, kDartAssertArgs, arraysize(kDartAssertArgs));
-    }
-  } else if (use_checked_mode) {
-    FML_DLOG(INFO) << "Checked mode is ON";
+  if (use_checked_mode) {
     PushBackAll(&args, kDartAssertArgs, arraysize(kDartAssertArgs));
-    PushBackAll(&args, kDartCheckedModeArgs, arraysize(kDartCheckedModeArgs));
-  } else {
-    FML_DLOG(INFO) << "Is not Dart 2 and Checked mode is OFF";
   }
 
   if (settings.start_paused) {
@@ -480,10 +445,6 @@ DartVM::~DartVM() {
 
 const Settings& DartVM::GetSettings() const {
   return settings_;
-}
-
-const fml::Mapping& DartVM::GetPlatformKernel() const {
-  return *platform_kernel_mapping_.get();
 }
 
 const DartSnapshot& DartVM::GetVMSnapshot() const {

@@ -15,8 +15,6 @@
 #include "flutter/shell/platform/darwin/common/command_line.h"
 #include "flutter/shell/platform/darwin/ios/framework/Headers/FlutterViewController.h"
 
-static const char* kScriptSnapshotFileName = "snapshot_blob.bin";
-static const char* kVMKernelSnapshotFileName = "platform.dill";
 static const char* kApplicationKernelSnapshotFileName = "kernel_blob.bin";
 
 static blink::Settings DefaultSettingsForProcess(NSBundle* bundle = nil) {
@@ -73,19 +71,24 @@ static blink::Settings DefaultSettingsForProcess(NSBundle* bundle = nil) {
       NSString* libraryName = [mainBundle objectForInfoDictionaryKey:@"FLTLibraryPath"];
       NSString* libraryPath = [mainBundle pathForResource:libraryName ofType:@""];
       if (libraryPath.length > 0) {
-        settings.application_library_path =
-            [NSBundle bundleWithPath:libraryPath].executablePath.UTF8String;
+        NSString* executablePath = [NSBundle bundleWithPath:libraryPath].executablePath;
+        if (executablePath.length > 0) {
+          settings.application_library_path = executablePath.UTF8String;
+        }
       }
     }
 
     // In case the application bundle is still not specified, look for the App.framework in the
     // Frameworks directory.
     if (settings.application_library_path.size() == 0) {
-      NSString* applicationFrameworkPath =
-          [mainBundle pathForResource:@"Frameworks/App.framework" ofType:@""];
+      NSString* applicationFrameworkPath = [mainBundle pathForResource:@"Frameworks/App.framework"
+                                                                ofType:@""];
       if (applicationFrameworkPath.length > 0) {
-        settings.application_library_path =
-            [NSBundle bundleWithPath:applicationFrameworkPath].executablePath.UTF8String;
+        NSString* executablePath =
+            [NSBundle bundleWithPath:applicationFrameworkPath].executablePath;
+        if (executablePath.length > 0) {
+          settings.application_library_path = executablePath.UTF8String;
+        }
       }
     }
   }
@@ -93,42 +96,28 @@ static blink::Settings DefaultSettingsForProcess(NSBundle* bundle = nil) {
   // Checks to see if the flutter assets directory is already present.
   if (settings.assets_path.size() == 0) {
     NSString* assetsName = [FlutterDartProject flutterAssetsName:bundle];
-    NSString* assetsPath = [mainBundle pathForResource:assetsName ofType:@""];
+    NSString* assetsPath = [bundle pathForResource:assetsName ofType:@""];
 
-    if (assetsPath.length > 0) {
+    if (assetsPath.length == 0) {
+      assetsPath = [mainBundle pathForResource:assetsName ofType:@""];
+    }
+
+    if (assetsPath.length == 0) {
+      NSLog(@"Failed to find assets path for \"%@\"", assetsName);
+    } else {
       settings.assets_path = assetsPath.UTF8String;
 
+      // Check if there is an application kernel snapshot in the assets directory we could
+      // potentially use.  Looking for the snapshot makes sense only if we have a VM that can use
+      // it.
       if (!blink::DartVM::IsRunningPrecompiledCode()) {
-        // Looking for the various script and kernel snapshot buffers only makes sense if we have a
-        // VM that can use these buffers.
-        {
-          // Check if there is a script snapshot in the assets directory we could potentially use.
-          NSURL* scriptSnapshotURL = [NSURL URLWithString:@(kScriptSnapshotFileName)
-                                            relativeToURL:[NSURL fileURLWithPath:assetsPath]];
-          if ([[NSFileManager defaultManager] fileExistsAtPath:scriptSnapshotURL.path]) {
-            settings.script_snapshot_path = scriptSnapshotURL.path.UTF8String;
-          }
-        }
-
-        {
-          // Check if there is a VM kernel snapshot in the assets directory we could potentially
-          // use.
-          NSURL* vmKernelSnapshotURL = [NSURL URLWithString:@(kVMKernelSnapshotFileName)
-                                              relativeToURL:[NSURL fileURLWithPath:assetsPath]];
-          if ([[NSFileManager defaultManager] fileExistsAtPath:vmKernelSnapshotURL.path]) {
-            settings.platform_kernel_path = vmKernelSnapshotURL.path.UTF8String;
-          }
-        }
-
-        {
-          // Check if there is an application kernel snapshot in the assets directory we could
-          // potentially use.
-          NSURL* applicationKernelSnapshotURL =
-              [NSURL URLWithString:@(kApplicationKernelSnapshotFileName)
-                     relativeToURL:[NSURL fileURLWithPath:assetsPath]];
-          if ([[NSFileManager defaultManager] fileExistsAtPath:applicationKernelSnapshotURL.path]) {
-            settings.application_kernel_asset = applicationKernelSnapshotURL.path.UTF8String;
-          }
+        NSURL* applicationKernelSnapshotURL =
+            [NSURL URLWithString:@(kApplicationKernelSnapshotFileName)
+                   relativeToURL:[NSURL fileURLWithPath:assetsPath]];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:applicationKernelSnapshotURL.path]) {
+          settings.application_kernel_asset = applicationKernelSnapshotURL.path.UTF8String;
+        } else {
+          NSLog(@"Failed to find snapshot: %@", applicationKernelSnapshotURL.path);
         }
       }
     }
@@ -191,24 +180,13 @@ static blink::Settings DefaultSettingsForProcess(NSBundle* bundle = nil) {
     if (flutterAssetsURL != nil &&
         [[NSFileManager defaultManager] fileExistsAtPath:flutterAssetsURL.path]) {
       _settings.assets_path = flutterAssetsURL.path.UTF8String;
-
-      NSURL* scriptSnapshotPath =
-          [NSURL URLWithString:@(kScriptSnapshotFileName) relativeToURL:flutterAssetsURL];
-      if ([[NSFileManager defaultManager] fileExistsAtPath:scriptSnapshotPath.path]) {
-        _settings.script_snapshot_path = scriptSnapshotPath.path.UTF8String;
-      }
     }
   }
 
   return self;
 }
 
-#pragma mark - Convenience initializers
-
-// Exists for backward-compatibility.  Expect this to be removed.
-- (instancetype)initFromDefaultSourceForConfiguration {
-  return [self init];
-}
+#pragma mark - Settings accessors
 
 - (const blink::Settings&)settings {
   return _settings;

@@ -4,6 +4,25 @@
 
 #include "flutter/lib/ui/compositing/scene_builder.h"
 
+#include "flutter/flow/layers/backdrop_filter_layer.h"
+#if defined(OS_FUCHSIA)
+#include "flutter/flow/layers/child_scene_layer.h"
+#endif
+#include "flutter/flow/layers/clip_path_layer.h"
+#include "flutter/flow/layers/clip_rect_layer.h"
+#include "flutter/flow/layers/clip_rrect_layer.h"
+#include "flutter/flow/layers/color_filter_layer.h"
+#include "flutter/flow/layers/container_layer.h"
+#include "flutter/flow/layers/layer.h"
+#include "flutter/flow/layers/layer_tree.h"
+#include "flutter/flow/layers/opacity_layer.h"
+#include "flutter/flow/layers/performance_overlay_layer.h"
+#include "flutter/flow/layers/physical_shape_layer.h"
+#include "flutter/flow/layers/picture_layer.h"
+#include "flutter/flow/layers/platform_view_layer.h"
+#include "flutter/flow/layers/shader_mask_layer.h"
+#include "flutter/flow/layers/texture_layer.h"
+#include "flutter/flow/layers/transform_layer.h"
 #include "flutter/fml/build_config.h"
 #include "flutter/lib/ui/painting/matrix.h"
 #include "flutter/lib/ui/painting/shader.h"
@@ -24,6 +43,7 @@ static void SceneBuilder_constructor(Dart_NativeArguments args) {
 IMPLEMENT_WRAPPERTYPEINFO(ui, SceneBuilder);
 
 #define FOR_EACH_BINDING(V)                         \
+  V(SceneBuilder, pushOffset)                       \
   V(SceneBuilder, pushTransform)                    \
   V(SceneBuilder, pushClipRect)                     \
   V(SceneBuilder, pushClipRRect)                    \
@@ -34,6 +54,8 @@ IMPLEMENT_WRAPPERTYPEINFO(ui, SceneBuilder);
   V(SceneBuilder, pushShaderMask)                   \
   V(SceneBuilder, pushPhysicalShape)                \
   V(SceneBuilder, pop)                              \
+  V(SceneBuilder, addPlatformView)                  \
+  V(SceneBuilder, addRetained)                      \
   V(SceneBuilder, addPicture)                       \
   V(SceneBuilder, addTexture)                       \
   V(SceneBuilder, addChildScene)                    \
@@ -51,12 +73,22 @@ void SceneBuilder::RegisterNatives(tonic::DartLibraryNatives* natives) {
        FOR_EACH_BINDING(DART_REGISTER_NATIVE)});
 }
 
-SceneBuilder::SceneBuilder() : layer_builder_(flow::LayerBuilder::Create()) {}
-
+SceneBuilder::SceneBuilder() = default;
 SceneBuilder::~SceneBuilder() = default;
 
 void SceneBuilder::pushTransform(const tonic::Float64List& matrix4) {
-  layer_builder_->PushTransform(ToSkMatrix(matrix4));
+  SkMatrix sk_matrix = ToSkMatrix(matrix4);
+  auto layer = std::make_unique<flow::TransformLayer>();
+  layer->set_transform(sk_matrix);
+  PushLayer(std::move(layer));
+}
+
+fml::RefPtr<EngineLayer> SceneBuilder::pushOffset(double dx, double dy) {
+  SkMatrix sk_matrix = SkMatrix::MakeTrans(dx, dy);
+  auto layer = std::make_shared<flow::TransformLayer>();
+  layer->set_transform(sk_matrix);
+  PushLayer(layer);
+  return EngineLayer::MakeRetained(layer);
 }
 
 void SceneBuilder::pushClipRect(double left,
@@ -64,31 +96,45 @@ void SceneBuilder::pushClipRect(double left,
                                 double top,
                                 double bottom,
                                 int clipBehavior) {
-  layer_builder_->PushClipRect(SkRect::MakeLTRB(left, top, right, bottom),
-                               static_cast<flow::Clip>(clipBehavior));
+  SkRect clipRect = SkRect::MakeLTRB(left, top, right, bottom);
+  flow::Clip clip_behavior = static_cast<flow::Clip>(clipBehavior);
+  auto layer = std::make_unique<flow::ClipRectLayer>(clip_behavior);
+  layer->set_clip_rect(clipRect);
+  PushLayer(std::move(layer));
 }
 
 void SceneBuilder::pushClipRRect(const RRect& rrect, int clipBehavior) {
-  layer_builder_->PushClipRoundedRect(rrect.sk_rrect,
-                                      static_cast<flow::Clip>(clipBehavior));
+  flow::Clip clip_behavior = static_cast<flow::Clip>(clipBehavior);
+  auto layer = std::make_unique<flow::ClipRRectLayer>(clip_behavior);
+  layer->set_clip_rrect(rrect.sk_rrect);
+  PushLayer(std::move(layer));
 }
 
 void SceneBuilder::pushClipPath(const CanvasPath* path, int clipBehavior) {
-  layer_builder_->PushClipPath(path->path(),
-                               static_cast<flow::Clip>(clipBehavior));
+  flow::Clip clip_behavior = static_cast<flow::Clip>(clipBehavior);
+  FML_DCHECK(clip_behavior != flow::Clip::none);
+  auto layer = std::make_unique<flow::ClipPathLayer>(clip_behavior);
+  layer->set_clip_path(path->path());
+  PushLayer(std::move(layer));
 }
 
 void SceneBuilder::pushOpacity(int alpha) {
-  layer_builder_->PushOpacity(alpha);
+  auto layer = std::make_unique<flow::OpacityLayer>();
+  layer->set_alpha(alpha);
+  PushLayer(std::move(layer));
 }
 
 void SceneBuilder::pushColorFilter(int color, int blendMode) {
-  layer_builder_->PushColorFilter(static_cast<SkColor>(color),
-                                  static_cast<SkBlendMode>(blendMode));
+  auto layer = std::make_unique<flow::ColorFilterLayer>();
+  layer->set_color(static_cast<SkColor>(color));
+  layer->set_blend_mode(static_cast<SkBlendMode>(blendMode));
+  PushLayer(std::move(layer));
 }
 
 void SceneBuilder::pushBackdropFilter(ImageFilter* filter) {
-  layer_builder_->PushBackdropFilter(filter->filter());
+  auto layer = std::make_unique<flow::BackdropFilterLayer>();
+  layer->set_filter(filter->filter());
+  PushLayer(std::move(layer));
 }
 
 void SceneBuilder::pushShaderMask(Shader* shader,
@@ -97,41 +143,63 @@ void SceneBuilder::pushShaderMask(Shader* shader,
                                   double maskRectTop,
                                   double maskRectBottom,
                                   int blendMode) {
-  layer_builder_->PushShaderMask(
-      shader->shader(),
-      SkRect::MakeLTRB(maskRectLeft, maskRectTop, maskRectRight,
-                       maskRectBottom),
-      static_cast<SkBlendMode>(blendMode));
+  SkRect rect = SkRect::MakeLTRB(maskRectLeft, maskRectTop, maskRectRight,
+                                 maskRectBottom);
+  auto layer = std::make_unique<flow::ShaderMaskLayer>();
+  layer->set_shader(shader->shader());
+  layer->set_mask_rect(rect);
+  layer->set_blend_mode(static_cast<SkBlendMode>(blendMode));
+  PushLayer(std::move(layer));
 }
 
-void SceneBuilder::pushPhysicalShape(const CanvasPath* path,
-                                     double elevation,
-                                     int color,
-                                     int shadow_color,
-                                     int clip_behavior) {
-  layer_builder_->PushPhysicalShape(
-      path->path(),                 //
-      elevation,                    //
-      static_cast<SkColor>(color),  //
-      static_cast<SkColor>(shadow_color),
-      UIDartState::Current()->window()->viewport_metrics().device_pixel_ratio,
-      static_cast<flow::Clip>(clip_behavior));
+fml::RefPtr<EngineLayer> SceneBuilder::pushPhysicalShape(const CanvasPath* path,
+                                                         double elevation,
+                                                         int color,
+                                                         int shadow_color,
+                                                         int clipBehavior) {
+  const SkPath& sk_path = path->path();
+  flow::Clip clip_behavior = static_cast<flow::Clip>(clipBehavior);
+  auto layer = std::make_shared<flow::PhysicalShapeLayer>(clip_behavior);
+  layer->set_path(sk_path);
+  layer->set_elevation(elevation);
+  layer->set_color(static_cast<SkColor>(color));
+  layer->set_shadow_color(static_cast<SkColor>(shadow_color));
+  layer->set_device_pixel_ratio(
+      UIDartState::Current()->window()->viewport_metrics().device_pixel_ratio);
+  PushLayer(layer);
+  return EngineLayer::MakeRetained(layer);
+}
+
+void SceneBuilder::addRetained(fml::RefPtr<EngineLayer> retainedLayer) {
+  if (!current_layer_) {
+    return;
+  }
+  current_layer_->Add(retainedLayer->Layer());
 }
 
 void SceneBuilder::pop() {
-  layer_builder_->Pop();
+  if (!current_layer_) {
+    return;
+  }
+  current_layer_ = current_layer_->parent();
 }
 
 void SceneBuilder::addPicture(double dx,
                               double dy,
                               Picture* picture,
                               int hints) {
-  layer_builder_->PushPicture(
-      SkPoint::Make(dx, dy),                             //
-      UIDartState::CreateGPUObject(picture->picture()),  //
-      !!(hints & 1),                                     // picture is complex
-      !!(hints & 2)                                      // picture will change
-  );
+  if (!current_layer_) {
+    return;
+  }
+  SkPoint offset = SkPoint::Make(dx, dy);
+  SkRect pictureRect = picture->picture()->cullRect();
+  pictureRect.offset(offset.x(), offset.y());
+  auto layer = std::make_unique<flow::PictureLayer>();
+  layer->set_offset(offset);
+  layer->set_picture(UIDartState::CreateGPUObject(picture->picture()));
+  layer->set_is_complex(!!(hints & 1));
+  layer->set_will_change(!!(hints & 2));
+  current_layer_->Add(std::move(layer));
 }
 
 void SceneBuilder::addTexture(double dx,
@@ -140,8 +208,30 @@ void SceneBuilder::addTexture(double dx,
                               double height,
                               int64_t textureId,
                               bool freeze) {
-  layer_builder_->PushTexture(SkPoint::Make(dx, dy),
-                              SkSize::Make(width, height), textureId, freeze);
+  if (!current_layer_) {
+    return;
+  }
+  auto layer = std::make_unique<flow::TextureLayer>();
+  layer->set_offset(SkPoint::Make(dx, dy));
+  layer->set_size(SkSize::Make(width, height));
+  layer->set_texture_id(textureId);
+  layer->set_freeze(freeze);
+  current_layer_->Add(std::move(layer));
+}
+
+void SceneBuilder::addPlatformView(double dx,
+                                   double dy,
+                                   double width,
+                                   double height,
+                                   int64_t viewId) {
+  if (!current_layer_) {
+    return;
+  }
+  auto layer = std::make_unique<flow::PlatformViewLayer>();
+  layer->set_offset(SkPoint::Make(dx, dy));
+  layer->set_size(SkSize::Make(width, height));
+  layer->set_view_id(viewId);
+  current_layer_->Add(std::move(layer));
 }
 
 void SceneBuilder::addChildScene(double dx,
@@ -151,10 +241,15 @@ void SceneBuilder::addChildScene(double dx,
                                  SceneHost* sceneHost,
                                  bool hitTestable) {
 #if defined(OS_FUCHSIA)
-  layer_builder_->PushChildScene(SkPoint::Make(dx, dy),            //
-                                 SkSize::Make(width, height),      //
-                                 sceneHost->export_node_holder(),  //
-                                 hitTestable);
+  if (!current_layer_) {
+    return;
+  }
+  auto layer = std::make_unique<flow::ChildSceneLayer>();
+  layer->set_offset(SkPoint::Make(dx, dy));
+  layer->set_size(SkSize::Make(width, height));
+  layer->set_export_node_holder(sceneHost->export_node_holder());
+  layer->set_hit_testable(hitTestable);
+  current_layer_->Add(std::move(layer));
 #endif  // defined(OS_FUCHSIA)
 }
 
@@ -163,30 +258,51 @@ void SceneBuilder::addPerformanceOverlay(uint64_t enabledOptions,
                                          double right,
                                          double top,
                                          double bottom) {
-  layer_builder_->PushPerformanceOverlay(
-      enabledOptions, SkRect::MakeLTRB(left, top, right, bottom));
+  if (!current_layer_) {
+    return;
+  }
+  SkRect rect = SkRect::MakeLTRB(left, top, right, bottom);
+  auto layer = std::make_unique<flow::PerformanceOverlayLayer>(enabledOptions);
+  layer->set_paint_bounds(rect);
+  current_layer_->Add(std::move(layer));
 }
 
 void SceneBuilder::setRasterizerTracingThreshold(uint32_t frameInterval) {
-  layer_builder_->SetRasterizerTracingThreshold(frameInterval);
+  rasterizer_tracing_threshold_ = frameInterval;
 }
 
 void SceneBuilder::setCheckerboardRasterCacheImages(bool checkerboard) {
-  layer_builder_->SetCheckerboardRasterCacheImages(checkerboard);
+  checkerboard_raster_cache_images_ = checkerboard;
 }
 
 void SceneBuilder::setCheckerboardOffscreenLayers(bool checkerboard) {
-  layer_builder_->SetCheckerboardOffscreenLayers(checkerboard);
+  checkerboard_offscreen_layers_ = checkerboard;
 }
 
 fml::RefPtr<Scene> SceneBuilder::build() {
-  fml::RefPtr<Scene> scene =
-      Scene::create(layer_builder_->TakeLayer(),
-                    layer_builder_->GetRasterizerTracingThreshold(),
-                    layer_builder_->GetCheckerboardRasterCacheImages(),
-                    layer_builder_->GetCheckerboardOffscreenLayers());
+  fml::RefPtr<Scene> scene = Scene::create(
+      std::move(root_layer_), rasterizer_tracing_threshold_,
+      checkerboard_raster_cache_images_, checkerboard_offscreen_layers_);
   ClearDartWrapper();
   return scene;
+}
+
+void SceneBuilder::PushLayer(std::shared_ptr<flow::ContainerLayer> layer) {
+  FML_DCHECK(layer);
+
+  if (!root_layer_) {
+    root_layer_ = std::move(layer);
+    current_layer_ = root_layer_.get();
+    return;
+  }
+
+  if (!current_layer_) {
+    return;
+  }
+
+  flow::ContainerLayer* newLayer = layer.get();
+  current_layer_->Add(std::move(layer));
+  current_layer_ = newLayer;
 }
 
 }  // namespace blink

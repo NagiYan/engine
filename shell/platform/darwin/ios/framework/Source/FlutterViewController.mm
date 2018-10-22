@@ -66,6 +66,14 @@
     [[self flutterViewControllerCore] setInitialRoute:route];
 }
 
+- (void)popRoute {
+    [[self flutterViewControllerCore] popRoute];
+}
+
+- (void)pushRoute:(NSString*)route {
+    [[self flutterViewControllerCore] pushRoute:route];
+}
+
 #pragma mark - Loading the view
 
 - (void)loadView {
@@ -119,19 +127,19 @@
   
 #pragma mark - Touch event handling
 - (void)touchesBegan:(NSSet*)touches withEvent:(UIEvent*)event {
-    [[self flutterViewControllerCore] dispatchTouches:touches phase:UITouchPhaseBegan];
+    [[self flutterViewControllerCore] dispatchTouches:touches pointerDataChangeOverride:nullptr];
 }
 
 - (void)touchesMoved:(NSSet*)touches withEvent:(UIEvent*)event {
-    [[self flutterViewControllerCore] dispatchTouches:touches phase:UITouchPhaseMoved];
+    [[self flutterViewControllerCore] dispatchTouches:touches pointerDataChangeOverride:nullptr];
 }
 
 - (void)touchesEnded:(NSSet*)touches withEvent:(UIEvent*)event {
-    [[self flutterViewControllerCore] dispatchTouches:touches phase:UITouchPhaseEnded];
+    [[self flutterViewControllerCore] dispatchTouches:touches pointerDataChangeOverride:nullptr];
 }
 
 - (void)touchesCancelled:(NSSet*)touches withEvent:(UIEvent*)event {
-    [[self flutterViewControllerCore] dispatchTouches:touches phase:UITouchPhaseCancelled];
+    [[self flutterViewControllerCore] dispatchTouches:touches pointerDataChangeOverride:nullptr];
 }
 
 #pragma mark - Handle view resizing
@@ -143,6 +151,10 @@
 - (void)viewSafeAreaInsetsDidChange {
     [[self flutterViewControllerCore] viewSafeAreaInsetsDidChange];
     [super viewSafeAreaInsetsDidChange];
+}
+
+- (void)setFlutterViewDidRenderCallback:(void (^)(void))callback {
+    [[self flutterViewControllerCore] setFlutterViewDidRenderCallback:callback];
 }
 
 #pragma mark - Status Bar touch event handling

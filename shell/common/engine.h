@@ -29,6 +29,14 @@ namespace shell {
 
 class Engine final : public blink::RuntimeDelegate {
  public:
+  // Used by Engine::Run
+  enum class RunStatus {
+    Success,                // Successful call to Run()
+    FailureAlreadyRunning,  // Isolate was already running; may not be
+                            // considered a failure by callers
+    Failure,  // Isolate could not be started or other unspecified failure
+  };
+
   class Delegate {
    public:
     virtual void OnEngineUpdateSemantics(
@@ -56,7 +64,7 @@ class Engine final : public blink::RuntimeDelegate {
   fml::WeakPtr<Engine> GetWeakPtr() const;
 
   FML_WARN_UNUSED_RESULT
-  bool Run(RunConfiguration configuration);
+  RunStatus Run(RunConfiguration configuration);
 
   // Used to "cold reload" a running application where the shell (along with the
   // platform view and its rasterizer bindings) remains the same but the root
@@ -78,8 +86,6 @@ class Engine final : public blink::RuntimeDelegate {
   bool UIIsolateHasLivePorts();
 
   tonic::DartErrorHandleType GetUIIsolateLastError();
-
-  tonic::DartErrorHandleType GetLoadScriptError();
 
   std::pair<bool, uint32_t> GetUIIsolateReturnCode();
 
@@ -111,7 +117,6 @@ class Engine final : public blink::RuntimeDelegate {
   const blink::Settings settings_;
   std::unique_ptr<Animator> animator_;
   std::unique_ptr<blink::RuntimeController> runtime_controller_;
-  tonic::DartErrorHandleType load_script_error_;
   std::string initial_route_;
   blink::ViewportMetrics viewport_metrics_;
   fml::RefPtr<blink::AssetManager> asset_manager_;
@@ -152,7 +157,7 @@ class Engine final : public blink::RuntimeDelegate {
 
   bool GetAssetAsBuffer(const std::string& name, std::vector<uint8_t>* data);
 
-  bool PrepareAndLaunchIsolate(RunConfiguration configuration);
+  RunStatus PrepareAndLaunchIsolate(RunConfiguration configuration);
 
   FML_DISALLOW_COPY_AND_ASSIGN(Engine);
 };
