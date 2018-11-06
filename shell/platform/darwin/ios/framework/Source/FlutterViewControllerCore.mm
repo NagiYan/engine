@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #define FML_USED_ON_EMBEDDER
-
+#import "flutter/shell/platform/darwin/ios/framework/Source/FlutterPlatformViews_Internal.h"
 #import "flutter/shell/platform/darwin/ios/framework/Source/FlutterViewController_Internal.h"
 
 #include <memory>
@@ -24,7 +24,7 @@
 
 #pragma mark - FlutterViewControllerCore
 
-@interface FlutterViewControllerCore () <FlutterTextInputDelegate>
+@interface FlutterViewControllerCore () <FlutterTextInputDelegate, FlutterScreenshotDelegate>
 @property(nonatomic, readonly) NSMutableDictionary* pluginPublications;
 @property(nonatomic, retain) FlutterViewController *viewController;
 @end
@@ -56,11 +56,13 @@
     fml::scoped_nsobject<FlutterView> _flutterView;
     fml::scoped_nsobject<UIView> _launchView;
     fml::ScopedBlock<void (^)(void)> _flutterViewRenderedCallback;
+    std::unique_ptr<shell::FlutterPlatformViewsController> _platformViewsController;
     UIInterfaceOrientationMask _orientationPreferences;
     UIStatusBarStyle _statusBarStyle;
     blink::ViewportMetrics _viewportMetrics;
     int64_t _nextTextureId;
     BOOL _initialized;
+    BOOL _viewOpaque;
     BOOL _gpuOperationDisabled;
     
 //    fml::scoped_nsobject<FlutterObservatoryPublisher> _publisher;
@@ -95,6 +97,8 @@ static dispatch_once_t onceTokenEngine;
         else
             _dartProject.reset([projectOrNil retain]);
         self.viewController = viewController;
+        
+        self.viewOpaque = YES;
         [self performCommonViewControllerInitialization];
     }
     return self;
@@ -147,6 +151,7 @@ static dispatch_once_t onceTokenEngine;
         [self setupChannels];
         [self setupNotificationCenterObservers];
         
+        _platformViewsController.reset(new shell::FlutterPlatformViewsController(self));
         _pluginPublications = [NSMutableDictionary new];
     }
 }
@@ -183,11 +188,11 @@ static dispatch_once_t onceTokenEngine;
                                     _threadHost.io_thread->GetTaskRunner()           // io
                                     );
     
-    FlutterView* fv = [[FlutterView alloc] init];
+    FlutterView* fv = [[FlutterView alloc] initWithDelegate:self opaque:self.isViewOpaque];
     fv.multipleTouchEnabled = YES;
     fv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _flutterView.reset(fv);
-    
+
     // Lambda captures by pointers to ObjC objects are fine here because the create call is
     // synchronous.
     shell::Shell::CreateCallback<shell::PlatformView> on_create_platform_view =
@@ -218,6 +223,18 @@ static dispatch_once_t onceTokenEngine;
     }
     
     return true;
+}
+
+- (BOOL)isViewOpaque {
+    return _viewOpaque;
+}
+
+- (void)setViewOpaque:(BOOL)value {
+    _viewOpaque = value;
+    if (_flutterView.get().layer.opaque != value) {
+        _flutterView.get().layer.opaque = value;
+        [_flutterView.get().layer setNeedsLayout];
+    }
 }
 
 - (void)setupChannels {
@@ -860,6 +877,16 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
                                 arguments:@[ @(client), actionString ]];
 }
 
+#pragma mark - Screenshot Delegate
+
+- (shell::Rasterizer::Screenshot)takeScreenshot:(shell::Rasterizer::ScreenshotType)type
+asBase64Encoded:(BOOL)base64Encode {
+    FML_DCHECK(_shell) << "Cannot takeScreenshot without a shell";
+    return _shell->Screenshot(type, base64Encode);
+}
+
+
+
 #pragma mark - Orientation updates
 
 - (void)onOrientationPreferencesUpdated:(NSNotification*)notification {
@@ -1099,6 +1126,12 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
     });
 }
 
+#pragma mark - Platform views
+
+- (shell::FlutterPlatformViewsController*)platformViewsController {
+    return _platformViewsController.get();
+}
+
 #pragma mark - FlutterBinaryMessenger
 
 - (void)sendOnChannel:(NSString*)channel message:(NSData*)message {
@@ -1204,6 +1237,11 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
 
 - (NSObject<FlutterTextureRegistry>*)textures {
     return _flutterViewControllerCore;
+}
+
+- (void)registerViewFactory:(NSObject<FlutterPlatformViewFactory>*)factory
+                     withId:(NSString*)factoryId {
+    [_flutterViewControllerCore platformViewsController] -> RegisterViewFactory(factory, factoryId);
 }
 
 - (void)publish:(NSObject*)value {
