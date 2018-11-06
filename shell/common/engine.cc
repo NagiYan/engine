@@ -258,14 +258,15 @@ void Engine::DispatchPlatformMessage(
     return;
   }
 
+    // If there's no runtime_, we may still need to set the initial route.
+    if (message->channel() == kNavigationChannel && HandleNavigationPlatformMessage(message)) {
+        return;
+    }
+    
   if (runtime_controller_->IsRootIsolateRunning() &&
       runtime_controller_->DispatchPlatformMessage(std::move(message))) {
     return;
   }
-
-  // If there's no runtime_, we may still need to set the initial route.
-  if (message->channel() == kNavigationChannel)
-    HandleNavigationPlatformMessage(std::move(message));
 }
 
 bool Engine::HandleLifecyclePlatformMessage(blink::PlatformMessage* message) {

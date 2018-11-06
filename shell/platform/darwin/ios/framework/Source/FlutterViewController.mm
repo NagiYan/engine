@@ -22,13 +22,19 @@
 #include "flutter/shell/platform/darwin/ios/framework/Source/platform_message_response_darwin.h"
 #include "flutter/shell/platform/darwin/ios/platform_view_ios.h"
 
+static FlutterView* gFlutterView = nil;
+
+@interface FlutterViewController ()
+@property (nonatomic, retain)FlutterView* flutterView;
+@end
+
 @implementation FlutterViewController {
   std::unique_ptr<fml::WeakPtrFactory<FlutterViewController>> _weakFactory;
   fml::scoped_nsobject<FlutterEngine> _engine;
 
   // We keep a separate reference to this and create it ahead of time because we want to be able to
   // setup a shell along with its platform view before the view has to appear.
-  fml::scoped_nsobject<FlutterView> _flutterView;
+//  fml::scoped_nsobject<FlutterView> _flutterView;
   fml::scoped_nsobject<UIView> _splashScreenView;
   fml::ScopedBlock<void (^)(void)> _flutterViewRenderedCallback;
   std::unique_ptr<shell::FlutterPlatformViewsController> _platformViewsController;
@@ -44,19 +50,25 @@
 - (instancetype)initWithEngine:(FlutterEngine*)engine
                        nibName:(NSString*)nibNameOrNil
                         bundle:(NSBundle*)nibBundleOrNil {
-  NSAssert(engine != nil, @"Engine is required");
-  self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
-  if (self) {
-    _viewOpaque = YES;
-    _engine.reset([engine retain]);
-    _flutterView.reset([[FlutterView alloc] initWithDelegate:_engine opaque:self.isViewOpaque]);
-    _weakFactory = std::make_unique<fml::WeakPtrFactory<FlutterViewController>>(self);
-
-    [self performCommonViewControllerInitialization];
-    [engine setViewController:self];
-  }
-
-  return self;
+    NSAssert(engine != nil, @"Engine is required");
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        _viewOpaque = YES;
+        _engine.reset([engine retain]);
+        
+        if (!gFlutterView) {
+            gFlutterView = [[FlutterView alloc] initWithDelegate:_engine opaque:self.isViewOpaque];
+        }
+        
+//        _flutterView.reset([gFlutterView retain]);
+        _flutterView = [gFlutterView retain];
+        _weakFactory = std::make_unique<fml::WeakPtrFactory<FlutterViewController>>(self);
+        
+        [self performCommonViewControllerInitialization];
+        [engine setViewController:self];
+    }
+    
+    return self;
 }
 
 - (instancetype)initWithProject:(FlutterDartProject*)projectOrNil
@@ -67,7 +79,8 @@
     _viewOpaque = YES;
     _weakFactory = std::make_unique<fml::WeakPtrFactory<FlutterViewController>>(self);
     _engine.reset([[FlutterEngine alloc] initWithName:@"io.flutter" project:projectOrNil]);
-    _flutterView.reset([[FlutterView alloc] initWithDelegate:_engine opaque:self.isViewOpaque]);
+//    _flutterView.reset([[FlutterView alloc] initWithDelegate:_engine opaque:self.isViewOpaque]);
+      _flutterView = gFlutterView;
     [_engine.get() runWithEntrypoint:nil];
     [_engine.get() setViewController:self];
 
@@ -95,10 +108,15 @@
 
 - (void)setViewOpaque:(BOOL)value {
   _viewOpaque = value;
-  if (_flutterView.get().layer.opaque != value) {
-    _flutterView.get().layer.opaque = value;
-    [_flutterView.get().layer setNeedsLayout];
-  }
+    if (_flutterView.layer.opaque != value) {
+        _flutterView.layer.opaque = value;
+        [_flutterView.layer setNeedsLayout];
+    }
+    
+//  if (_flutterView.get().layer.opaque != value) {
+//    _flutterView.get().layer.opaque = value;
+//    [_flutterView.get().layer setNeedsLayout];
+//  }
 }
 
 #pragma mark - Common view controller initialization tasks
@@ -226,11 +244,12 @@
 #pragma mark - Loading the view
 
 - (void)loadView {
-  self.view = _flutterView.get();
+//  self.view = _flutterView.get();
+    self.view = _flutterView;
   self.view.multipleTouchEnabled = YES;
   self.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-  [self installSplashScreenViewIfNecessary];
+//  [self installSplashScreenViewIfNecessary];
 }
 
 #pragma mark - Managing launch views
@@ -357,8 +376,8 @@
 - (void)surfaceUpdated:(BOOL)appeared {
   // NotifyCreated/NotifyDestroyed are synchronous and require hops between the UI and GPU thread.
   if (appeared) {
-    [self installSplashScreenViewCallback];
-    [_engine.get() platformViewsController] -> SetFlutterView(_flutterView.get());
+//    [self installSplashScreenViewCallback];
+    [_engine.get() platformViewsController] -> SetFlutterView(_flutterView);
     [_engine.get() platformView] -> NotifyCreated();
   } else {
     [_engine.get() platformView] -> NotifyDestroyed();
