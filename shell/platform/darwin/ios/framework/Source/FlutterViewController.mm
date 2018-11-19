@@ -115,13 +115,13 @@
 }
 
 - (void)didReceiveMemoryWarning {
-    // load and not visible
-    if (self.isViewLoaded && !self.view.window) {
-        // set the blank view
-        self.view = nil;
-        // free the core
-        [FlutterViewControllerCore freeMemory];
-    }
+//    // load and not visible
+//    if (self.isViewLoaded && !self.view.window) {
+//        // set the blank view
+//        self.view = nil;
+//        // free the core
+//        [FlutterViewControllerCore freeMemory];
+//    }
     [super didReceiveMemoryWarning];
 }
   
