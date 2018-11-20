@@ -484,7 +484,7 @@ static dispatch_once_t onceTokenEngine;
 
 - (void)viewDidAppear:(BOOL)animated {
     TRACE_EVENT0("flutter", "viewDidAppear");
-    //  [self onLocaleUpdated:nil];
+//      [self onLocaleUpdated:nil];
     [self onUserSettingsChanged:nil];
     [self onAccessibilityStatusChanged:nil];
     [_lifecycleChannel.get() sendMessage:@"AppLifecycleState.resumed"];
@@ -955,7 +955,7 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
         countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
     }
     if (languageCode && countryCode)
-        [_localizationChannel.get() invokeMethod:@"setLocale" arguments:@[ languageCode, countryCode ]];
+        [_localizationChannel.get() invokeMethod:@"setLocale" arguments:@[languageCode, countryCode, @"", @""]];
 }
 
 #pragma mark - Set user settings
