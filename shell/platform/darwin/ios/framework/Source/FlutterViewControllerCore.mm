@@ -758,6 +758,10 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 //
 // Viewport padding represents the iOS safe area insets.
 - (void)updateViewportPadding:(BOOL)filter {
+    
+    if (![_flutterView nextResponder])
+        return;
+    
     CGFloat scale = [UIScreen mainScreen].scale;
     if (@available(iOS 11, *)) {
         // 解决从后台进入前台导致错误下移 横屏可能会有问题
@@ -778,39 +782,43 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 #pragma mark - Keyboard events
 
 - (void)keyboardWillChangeFrame:(NSNotification*)notification {
-    if ([_flutterView nextResponder]) {
-        NSDictionary* info = [notification userInfo];
-        CGFloat bottom = CGRectGetHeight([[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue]);
-        CGFloat scale = [UIScreen mainScreen].scale;
-        
-        // The keyboard is treated as an inset since we want to effectively reduce the window size by the
-        // keyboard height. We also eliminate any bottom safe-area padding since they keyboard 'consumes'
-        // the home indicator widget.
-        _viewportMetrics.physical_view_inset_bottom = bottom * scale;
-        _viewportMetrics.physical_padding_bottom = 0;
-        [self updateViewportMetrics];
-    }
+    if (![_flutterView nextResponder])
+        return;
+    
+    NSDictionary* info = [notification userInfo];
+    CGFloat bottom = CGRectGetHeight([[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue]);
+    CGFloat scale = [UIScreen mainScreen].scale;
+    
+    // The keyboard is treated as an inset since we want to effectively reduce the window size by the
+    // keyboard height. We also eliminate any bottom safe-area padding since they keyboard 'consumes'
+    // the home indicator widget.
+    _viewportMetrics.physical_view_inset_bottom = bottom * scale;
+    _viewportMetrics.physical_padding_bottom = 0;
+    [self updateViewportMetrics];
 }
 
 - (void)keyboardWillBeHidden:(NSNotification*)notification {
-    if ([_flutterView nextResponder]) {
-        CGFloat scale = [UIScreen mainScreen].scale;
-        _viewportMetrics.physical_view_inset_bottom = 0;
-        
-        // Restore any safe area padding that the keyboard had consumed.
-        if (@available(iOS 11, *)) {
-            _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
-        } else {
-            _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
-        }
-        [self updateViewportMetrics];
-
+    if (![_flutterView nextResponder])
+        return;
+    
+    CGFloat scale = [UIScreen mainScreen].scale;
+    _viewportMetrics.physical_view_inset_bottom = 0;
+    
+    // Restore any safe area padding that the keyboard had consumed.
+    if (@available(iOS 11, *)) {
+        _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
+    } else {
+        _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
     }
+    [self updateViewportMetrics];
 }
 
 #pragma mark - Text input delegate
 
 - (void)updateEditingClient:(int)client withState:(NSDictionary*)state {
+    if (![_flutterView nextResponder])
+        return;
+    
     [_textInputChannel.get() invokeMethod:@"TextInputClient.updateEditingState"
                                 arguments:@[ @(client), state ]];
 }
@@ -950,6 +958,8 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 
 - (void)onLocaleChange:(NSNotification*)notification {
     NSString* languageCode =  notification.userInfo[@"languageCode"];
+    if ([languageCode hasPrefix:@"zh"])
+        languageCode = @"zh";
     NSString* countryCode = notification.userInfo[@"countryCode"];
     if (!countryCode) {
         countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
@@ -961,6 +971,9 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 #pragma mark - Set user settings
 
 - (void)onUserSettingsChanged:(NSNotification*)notification {
+    if (![_flutterView nextResponder])
+        return;
+    
     [_settingsChannel.get() sendMessage:@{
                                           @"textScaleFactor" : @([self textScaleFactor]),
                                           @"alwaysUse24HourFormat" : @([self isAlwaysUse24HourFormat]),
@@ -1042,6 +1055,10 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 constexpr CGFloat kStandardStatusBarHeight = 20.0;
 
 - (void)handleStatusBarTouches:(UIEvent*)event {
+    
+    if (![_flutterView nextResponder])
+        return;
+    
     CGFloat standardStatusBarHeight = kStandardStatusBarHeight;
     if (@available(iOS 11, *)) {
         standardStatusBarHeight = self.flutterView.safeAreaInsets.top;
@@ -1080,6 +1097,9 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
 }
 
 - (void)onPreferredStatusBarStyleUpdated:(NSNotification*)notification {
+    if (![_flutterView nextResponder])
+        return;
+    
     // Notifications may not be on the iOS UI thread
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDictionary* info = notification.userInfo;

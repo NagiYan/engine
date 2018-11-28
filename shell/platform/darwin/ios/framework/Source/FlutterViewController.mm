@@ -85,6 +85,7 @@
         _snapView = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
         _snapView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [_snapView setBackgroundColor:[UIColor whiteColor]];
+        _snapView.tag = 19999;
     }
     return _snapView;
 }
@@ -95,23 +96,27 @@
     [super viewWillAppear:animated];
     [self showFlutterView];
     [[self flutterViewControllerCore] viewWillAppear:animated];
+    NSLog(@"[ASCFlutter] viewWillAppear %@", self);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self showFlutterView];
     [[self flutterViewControllerCore] viewDidAppear:animated];
+    NSLog(@"[ASCFlutter] viewDidAppear %@", self);
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [self showSnapView];
     [super viewWillDisappear:animated];
     [[self flutterViewControllerCore] viewWillDisappear:animated];
+    NSLog(@"[ASCFlutter] viewWillDisappear %@", self);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
     [[self flutterViewControllerCore] viewDidDisappear:animated];
+    NSLog(@"[ASCFlutter] viewDidDisappear %@", self);
 }
 
 - (void)didReceiveMemoryWarning {
@@ -220,19 +225,48 @@
 
 #pragma mark - tools
 
+- (void)didMoveToParentViewController:(UIViewController*)parent {
+    if ([[[self flutterViewControllerCore] flutterView] superview]) {
+        UIView* snap = [[[self flutterViewControllerCore] flutterView] viewWithTag:19999];
+        snap.tag = 0;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [snap removeFromSuperview];
+        });
+    }
+}
+
 - (void)showFlutterView {
     if (![[[self flutterViewControllerCore] flutterView] nextResponder]) {
         self.view = [[self flutterViewControllerCore] flutterView];
         [[self flutterViewControllerCore] updateHolder:self];
-        //NSLog(@"ASCFlutter FlutterViewControllerCore updateHolder %@", self);
         [self.view setUserInteractionEnabled:YES];
+        
+        // 显示部分还是维持缩略图
+        if (self.snapView) {
+            [self.view addSubview:self.snapView];
+            self.snapView.tag = 19999;
+        }
+    }
+    else {
+        // 移除缩略图
+        if ([self.snapView superview] && self.snapView.tag  != 0) {
+            [self.snapView removeFromSuperview];
+        }
     }
 }
 
 - (void)showSnapView {
-    self.snapView = [self.view snapshotViewAfterScreenUpdates:NO];
-    [self.view setUserInteractionEnabled:FALSE];
-    self.view = self.snapView;
+    // 移除缩略图
+    if ([self.snapView superview]) {
+        [self.snapView removeFromSuperview];
+        self.view = self.snapView;
+    }
+    else {
+        self.snapView = [self.view snapshotViewAfterScreenUpdates:NO];
+        self.snapView.tag = 19999;
+        [self.view setUserInteractionEnabled:FALSE];
+        self.view = self.snapView;
+    }
 }
 
 @end
