@@ -362,6 +362,11 @@ static dispatch_once_t onceTokenEngine;
                selector:@selector(onLocaleChange:)
                    name:@"kASCLocalChangeNotification"
                  object:nil];
+    
+    [center addObserver:self
+               selector:@selector(keyboardWillBeHidden:)
+                   name:@"kASCKeyboardHideNotification"
+                 object:nil];
 }
 
 - (void)setInitialRoute:(NSString*)route {
