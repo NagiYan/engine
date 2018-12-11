@@ -1134,8 +1134,6 @@ constexpr CGFloat kStandardStatusBarHeight = 20.0;
               message:(NSData*)message
           binaryReply:(FlutterBinaryReply)callback {
     
-    if (![_flutterView nextResponder])
-        return;
     
     NSAssert(channel, @"The channel must not be null");
     fml::RefPtr<shell::PlatformMessageResponseDarwin> response =
