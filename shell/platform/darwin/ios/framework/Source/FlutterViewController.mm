@@ -62,6 +62,9 @@ static double kTouchTrackerCheckInterval = 1.f;
     _weakFactory = std::make_unique<fml::WeakPtrFactory<FlutterViewController>>(self);
 
     [self performCommonViewControllerInitialization];
+      
+      [self setEnableForRunnersBatch:YES];
+      
     [engine setViewController:self];
   }
 
@@ -436,6 +439,14 @@ static double kTouchTrackerCheckInterval = 1.f;
   [self onAccessibilityStatusChanged:nil];
   [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.resumed"];
 
+    if ([_engine.get() viewController] != self) {
+        if (_viewportMetrics.physical_width)
+            [self surfaceUpdated:YES];
+        [_engine.get() setViewController:self];
+        if (_viewportMetrics.physical_width)
+            [self surfaceUpdated:YES];
+    }
+    
   [super viewDidAppear:animated];
 }
 
@@ -448,9 +459,10 @@ static double kTouchTrackerCheckInterval = 1.f;
 
 - (void)viewDidDisappear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidDisappear");
-  [self surfaceUpdated:NO];
-  [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
-
+    if ([_engine.get() viewController] == self) {
+        [self surfaceUpdated:NO];
+        [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
+    }
   [super viewDidDisappear:animated];
 }
 
@@ -751,7 +763,7 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
   _viewportMetrics.physical_width = viewSize.width * scale;
   _viewportMetrics.physical_height = viewSize.height * scale;
 
-  [self updateViewportPadding];
+    [self updateViewportPadding:NO];
   [self updateViewportMetrics];
 
   // This must run after updateViewportMetrics so that the surface creation tasks are queued after
@@ -761,7 +773,7 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 }
 
 - (void)viewSafeAreaInsetsDidChange {
-  [self updateViewportPadding];
+    [self updateViewportPadding:YES];
   [self updateViewportMetrics];
   [super viewSafeAreaInsetsDidChange];
 }
@@ -769,16 +781,19 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
 // Updates _viewportMetrics physical padding.
 //
 // Viewport padding represents the iOS safe area insets.
-- (void)updateViewportPadding {
-  CGFloat scale = [UIScreen mainScreen].scale;
-  if (@available(iOS 11, *)) {
-    _viewportMetrics.physical_padding_top = self.view.safeAreaInsets.top * scale;
-    _viewportMetrics.physical_padding_left = self.view.safeAreaInsets.left * scale;
-    _viewportMetrics.physical_padding_right = self.view.safeAreaInsets.right * scale;
-    _viewportMetrics.physical_padding_bottom = self.view.safeAreaInsets.bottom * scale;
-  } else {
-    _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
-  }
+- (void)updateViewportPadding:(BOOL)filter {
+    CGFloat scale = [UIScreen mainScreen].scale;
+    if (@available(iOS 11, *)) {
+        // 解决从后台进入前台导致错误下移 横屏可能会有问题
+        if (!filter) {
+            _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+        }
+        _viewportMetrics.physical_padding_left = self.flutterView.safeAreaInsets.left * scale;
+        _viewportMetrics.physical_padding_right = self.flutterView.safeAreaInsets.right * scale;
+        _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
+    } else {
+        _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
+    }
 }
 
 #pragma mark - Keyboard events
