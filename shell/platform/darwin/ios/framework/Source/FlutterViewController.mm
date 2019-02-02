@@ -940,9 +940,9 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
             _localeParams = [NSMutableArray new];
         }
         
-        _localeParams = [@[languageCode, countryCode, @"", @""] mutableCopy];
+        _localeParams = [@[languageCode?:@"", countryCode?:@"", @"", @""] mutableCopy];
         
-        if (languageCode && countryCode)
+        if (languageCode)
             [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
     }
     else if (_localeParams) {
