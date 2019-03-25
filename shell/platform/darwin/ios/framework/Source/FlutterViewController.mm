@@ -399,6 +399,7 @@ static double kTouchTrackerCheckInterval = 1.f;
 
 - (void)surfaceUpdated:(BOOL)appeared {
   // NotifyCreated/NotifyDestroyed are synchronous and require hops between the UI and GPU thread.
+    NSLog(@"[FlutterX] %@", appeared?@"激活":@"失活");
   [self setEnableForRunnersBatch:YES];
   if (appeared) {
     [self installSplashScreenViewCallback];
@@ -433,7 +434,7 @@ static double kTouchTrackerCheckInterval = 1.f;
 
 - (void)viewDidAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidAppear");
-//  [self onLocaleUpdated:nil];
+
     [self onLocaleChange:nil];
   [self onUserSettingsChanged:nil];
   [self onAccessibilityStatusChanged:nil];
@@ -787,10 +788,10 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
         // 解决从后台进入前台导致错误下移 横屏可能会有问题
         if (!filter) {
             _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+            _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
         }
         _viewportMetrics.physical_padding_left = self.flutterView.safeAreaInsets.left * scale;
         _viewportMetrics.physical_padding_right = self.flutterView.safeAreaInsets.right * scale;
-        _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
     } else {
         _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
     }
