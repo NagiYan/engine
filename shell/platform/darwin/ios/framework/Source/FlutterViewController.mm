@@ -39,6 +39,7 @@ NSNotificationName const FlutterSemanticsUpdateNotification = @"FlutterSemantics
   BOOL _initialized;
   BOOL _viewOpaque;
   BOOL _engineNeedsLaunch;
+  NSMutableArray *_localeParams;
 }
 
 #pragma mark - Manage and override all designated initializers
@@ -214,6 +215,11 @@ NSNotificationName const FlutterSemanticsUpdateNotification = @"FlutterSemantics
              selector:@selector(onUserSettingsChanged:)
                  name:UIContentSizeCategoryDidChangeNotification
                object:nil];
+    
+    [center addObserver:self
+               selector:@selector(onLocaleChange:)
+                   name:@"kASCLocalChangeNotification"
+                 object:nil];
 }
 
 - (void)setInitialRoute:(NSString*)route {
@@ -408,7 +414,8 @@ NSNotificationName const FlutterSemanticsUpdateNotification = @"FlutterSemantics
 
 - (void)viewDidAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidAppear");
-  [self onLocaleUpdated:nil];
+//  [self onLocaleUpdated:nil];
+  [self onLocaleChange:nil];
   [self onUserSettingsChanged:nil];
   [self onAccessibilityStatusChanged:nil];
   [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.resumed"];
@@ -788,6 +795,28 @@ static blink::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) {
     return;
   }
   [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:data];
+}
+
+- (void)onLocaleChange:(NSNotification*)notification {
+    if (notification) {
+        NSString* languageCode =  notification.userInfo[@"languageCode"];
+        NSString* countryCode = notification.userInfo[@"countryCode"];
+        if (!countryCode) {
+            countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
+        }
+        
+        if (!_localeParams) {
+            _localeParams = [NSMutableArray new];
+        }
+        
+        _localeParams = [@[languageCode?:@"", countryCode?:@"", @"", @""] mutableCopy];
+        
+        if (languageCode)
+            [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
+    }
+    else if (_localeParams) {
+        [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
+    }
 }
 
 #pragma mark - Set user settings
