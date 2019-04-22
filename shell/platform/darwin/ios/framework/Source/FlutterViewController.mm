@@ -443,16 +443,12 @@ NSNotificationName const FlutterSemanticsUpdateNotification = @"FlutterSemantics
 
 - (void)viewDidDisappear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidDisappear");
-<<<<<<< HEAD
-  [self surfaceUpdated:NO];
-  [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
-  [self flushOngoingTouches];
-=======
+
     if ([_engine.get() viewController] == self) {
         [self surfaceUpdated:NO];
         [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
+        [self flushOngoingTouches];
     }
->>>>>>> v1.3.13
 
   [super viewDidDisappear:animated];
 }
