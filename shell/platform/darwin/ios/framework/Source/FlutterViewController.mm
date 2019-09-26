@@ -64,6 +64,7 @@ typedef enum UIAccessibilityContrast : NSInteger {
   BOOL _viewOpaque;
   BOOL _engineNeedsLaunch;
   NSMutableSet<NSNumber*>* _ongoingTouches;
+  NSMutableArray *_localeParams;
 }
 
 @synthesize displayingFlutterUI = _displayingFlutterUI;
@@ -199,10 +200,15 @@ typedef enum UIAccessibilityContrast : NSInteger {
                  name:UIKeyboardWillHideNotification
                object:nil];
 
-  [center addObserver:self
-             selector:@selector(onLocaleUpdated:)
-                 name:NSCurrentLocaleDidChangeNotification
-               object:nil];
+//  [center addObserver:self
+//             selector:@selector(onLocaleUpdated:)
+//                 name:NSCurrentLocaleDidChangeNotification
+//               object:nil];
+    
+    [center addObserver:self
+               selector:@selector(onLocaleUpdatedASC:)
+                   name:@"kASCLocalChangeNotification"
+                 object:nil];
 
   [center addObserver:self
              selector:@selector(onAccessibilityStatusChanged:)
@@ -465,7 +471,8 @@ typedef enum UIAccessibilityContrast : NSInteger {
 
 - (void)viewDidAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidAppear");
-  [self onLocaleUpdated:nil];
+//  [self onLocaleUpdated:nil];
+    [self onLocaleUpdatedASC:nil];
   [self onUserSettingsChanged:nil];
   [self onAccessibilityStatusChanged:nil];
   [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.resumed"];
@@ -912,6 +919,28 @@ static flutter::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) 
     return;
   }
   [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:data];
+}
+
+- (void)onLocaleUpdatedASC:(NSNotification*)notification {
+    if (notification) {
+        NSString* languageCode =  notification.userInfo[@"languageCode"];
+        NSString* countryCode = notification.userInfo[@"countryCode"];
+        if (!countryCode) {
+            countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
+        }
+        
+        if (!_localeParams) {
+            _localeParams = [NSMutableArray new];
+        }
+        
+        _localeParams = [@[languageCode?:@"", countryCode?:@"", @"", @""] mutableCopy];
+        
+        if (languageCode)
+            [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
+    }
+    else if (_localeParams) {
+        [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
+    }
 }
 
 #pragma mark - Set user settings
