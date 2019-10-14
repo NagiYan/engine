@@ -433,6 +433,8 @@ typedef enum UIAccessibilityContrast : NSInteger {
 - (void)surfaceUpdated:(BOOL)appeared {
   // NotifyCreated/NotifyDestroyed are synchronous and require hops between the UI and GPU thread.
   if (appeared) {
+      if ([_engine.get() viewController] != self)
+          [_engine.get() setViewController:self];
     [self installFirstFrameCallback];
     [_engine.get() platformViewsController] -> SetFlutterView(_flutterView.get());
     [_engine.get() platformViewsController] -> SetFlutterViewController(self);
@@ -476,14 +478,6 @@ typedef enum UIAccessibilityContrast : NSInteger {
   [self onUserSettingsChanged:nil];
   [self onAccessibilityStatusChanged:nil];
   [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.resumed"];
-
-    if ([_engine.get() viewController] != self) {
-        if (_viewportMetrics.physical_width)
-            [self surfaceUpdated:YES];
-        [_engine.get() setViewController:self];
-        if (_viewportMetrics.physical_width)
-            [self surfaceUpdated:YES];
-    }
     
   [super viewDidAppear:animated];
 }
