@@ -440,6 +440,8 @@ typedef enum UIAccessibilityContrast : NSInteger {
     [_engine.get() platformViewsController] -> SetFlutterViewController(self);
     [_engine.get() platformView] -> NotifyCreated();
   } else {
+      if ([_engine.get() viewController] != self)
+          return;
     self.displayingFlutterUI = NO;
     [_engine.get() platformView] -> NotifyDestroyed();
     [_engine.get() platformViewsController] -> SetFlutterView(nullptr);
@@ -491,10 +493,9 @@ typedef enum UIAccessibilityContrast : NSInteger {
 
 - (void)viewDidDisappear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidDisappear");
-//  [self surfaceUpdated:NO];
-//  [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
+  [self surfaceUpdated:NO];
+
     if ([_engine.get() viewController] == self) {
-        [self surfaceUpdated:NO];
         [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
     }
     
