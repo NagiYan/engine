@@ -440,7 +440,7 @@ typedef enum UIAccessibilityContrast : NSInteger {
     [_engine.get() platformViewsController] -> SetFlutterViewController(self);
     [_engine.get() platformView] -> NotifyCreated();
   } else {
-      if ([_engine.get() viewController] != self)
+      if ([_engine.get() viewController] && [_engine.get() viewController] != self)
           return;
     self.displayingFlutterUI = NO;
     [_engine.get() platformView] -> NotifyDestroyed();

@@ -62,7 +62,10 @@ IOSGLRenderTarget::IOSGLRenderTarget(fml::scoped_nsobject<CAEAGLLayer> layer,
 
 IOSGLRenderTarget::~IOSGLRenderTarget() {
   EAGLContext* context = EAGLContext.currentContext;
-  onscreen_gl_context_->MakeCurrent();
+    if (onscreen_gl_context_) {
+        onscreen_gl_context_->MakeCurrent();
+    }
+  
   FML_DCHECK(glGetError() == GL_NO_ERROR);
 
   // Deletes on GL_NONEs are ignored
