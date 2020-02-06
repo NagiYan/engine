@@ -64,6 +64,7 @@ typedef enum UIAccessibilityContrast : NSInteger {
   BOOL _viewOpaque;
   BOOL _engineNeedsLaunch;
   NSMutableSet<NSNumber*>* _ongoingTouches;
+  NSMutableArray *_localeParams;
 }
 
 @synthesize displayingFlutterUI = _displayingFlutterUI;
@@ -199,10 +200,15 @@ typedef enum UIAccessibilityContrast : NSInteger {
                  name:UIKeyboardWillHideNotification
                object:nil];
 
-  [center addObserver:self
-             selector:@selector(onLocaleUpdated:)
-                 name:NSCurrentLocaleDidChangeNotification
-               object:nil];
+//  [center addObserver:self
+//             selector:@selector(onLocaleUpdated:)
+//                 name:NSCurrentLocaleDidChangeNotification
+//               object:nil];
+    
+    [center addObserver:self
+               selector:@selector(onLocaleUpdatedASC:)
+                   name:@"kASCLocalChangeNotification"
+                 object:nil];
 
   [center addObserver:self
              selector:@selector(onAccessibilityStatusChanged:)
@@ -427,11 +433,15 @@ typedef enum UIAccessibilityContrast : NSInteger {
 - (void)surfaceUpdated:(BOOL)appeared {
   // NotifyCreated/NotifyDestroyed are synchronous and require hops between the UI and GPU thread.
   if (appeared) {
+      if ([_engine.get() viewController] != self)
+          [_engine.get() setViewController:self];
     [self installFirstFrameCallback];
     [_engine.get() platformViewsController] -> SetFlutterView(_flutterView.get());
     [_engine.get() platformViewsController] -> SetFlutterViewController(self);
     [_engine.get() platformView] -> NotifyCreated();
   } else {
+      if ([_engine.get() viewController] && [_engine.get() viewController] != self)
+          return;
     self.displayingFlutterUI = NO;
     [_engine.get() platformView] -> NotifyDestroyed();
     [_engine.get() platformViewsController] -> SetFlutterView(nullptr);
@@ -465,7 +475,8 @@ typedef enum UIAccessibilityContrast : NSInteger {
 
 - (void)viewDidAppear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidAppear");
-  [self onLocaleUpdated:nil];
+//  [self onLocaleUpdated:nil];
+    [self onLocaleUpdatedASC:nil];
   [self onUserSettingsChanged:nil];
   [self onAccessibilityStatusChanged:nil];
   [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.resumed"];
@@ -483,7 +494,11 @@ typedef enum UIAccessibilityContrast : NSInteger {
 - (void)viewDidDisappear:(BOOL)animated {
   TRACE_EVENT0("flutter", "viewDidDisappear");
   [self surfaceUpdated:NO];
-  [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
+
+    if ([_engine.get() viewController] == self) {
+        [[_engine.get() lifecycleChannel] sendMessage:@"AppLifecycleState.paused"];
+    }
+    
   [self flushOngoingTouches];
 
   [super viewDidDisappear:animated];
@@ -763,7 +778,8 @@ static flutter::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) 
   _viewportMetrics.physical_width = viewSize.width * scale;
   _viewportMetrics.physical_height = viewSize.height * scale;
 
-  [self updateViewportPadding];
+//  [self updateViewportPadding];
+    [self updateViewportPadding:NO];
   [self updateViewportMetrics];
 
   // This must run after updateViewportMetrics so that the surface creation tasks are queued after
@@ -787,7 +803,8 @@ static flutter::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) 
 }
 
 - (void)viewSafeAreaInsetsDidChange {
-  [self updateViewportPadding];
+//  [self updateViewportPadding];
+    [self updateViewportPadding:YES];
   [self updateViewportMetrics];
   [super viewSafeAreaInsetsDidChange];
 }
@@ -805,6 +822,21 @@ static flutter::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) 
   } else {
     _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
   }
+}
+
+- (void)updateViewportPadding:(BOOL)filter {
+    CGFloat scale = [UIScreen mainScreen].scale;
+    if (@available(iOS 11, *)) {
+        // 解决从后台进入前台导致错误下移 横屏可能会有问题
+        if (!filter) {
+            _viewportMetrics.physical_padding_top = self.flutterView.safeAreaInsets.top * scale;
+            _viewportMetrics.physical_padding_bottom = self.flutterView.safeAreaInsets.bottom * scale;
+        }
+        _viewportMetrics.physical_padding_left = self.flutterView.safeAreaInsets.left * scale;
+        _viewportMetrics.physical_padding_right = self.flutterView.safeAreaInsets.right * scale;
+    } else {
+        _viewportMetrics.physical_padding_top = [self statusBarPadding] * scale;
+    }
 }
 
 #pragma mark - Keyboard events
@@ -944,6 +976,28 @@ static flutter::PointerData::DeviceKind DeviceKindFromTouchType(UITouch* touch) 
     return;
   }
   [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:data];
+}
+
+- (void)onLocaleUpdatedASC:(NSNotification*)notification {
+    if (notification) {
+        NSString* languageCode =  notification.userInfo[@"languageCode"];
+        NSString* countryCode = notification.userInfo[@"countryCode"];
+        if (!countryCode) {
+            countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
+        }
+        
+        if (!_localeParams) {
+            _localeParams = [NSMutableArray new];
+        }
+        
+        _localeParams = [@[languageCode?:@"", countryCode?:@"", @"", @""] mutableCopy];
+        
+        if (languageCode)
+            [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
+    }
+    else if (_localeParams) {
+        [[_engine.get() localizationChannel] invokeMethod:@"setLocale" arguments:_localeParams];
+    }
 }
 
 #pragma mark - Set user settings
